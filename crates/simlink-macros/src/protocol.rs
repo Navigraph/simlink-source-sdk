@@ -155,10 +155,19 @@ impl Protocol {
         self.root(Some("SourceOptions".into()), descriptor)?;
 
         // The rejection listener reads these frame fields by name.
-        for field in ["event", "code", "message"] {
-            manifest["errorFrame"]["properties"]
-                .get(field)
-                .ok_or(format!("errorFrame.properties.{field} is missing"))?;
+        for field in [
+            "event",
+            "code",
+            "message",
+            "issues/items/properties/path",
+            "issues/items/properties/message",
+        ] {
+            manifest
+                .pointer(&format!("/errorFrame/properties/{field}"))
+                .ok_or(format!(
+                    "errorFrame.properties.{} is missing",
+                    field.replace('/', ".")
+                ))?;
         }
 
         let events = manifest["events"]

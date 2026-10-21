@@ -28,10 +28,12 @@ struct State : simlink::StateListener {
 };
 
 struct Rejections : simlink::RejectionListener {
-    void rejected(const std::string& channel, const std::string& code,
-                  const std::string& message) override {
-        std::printf("Simlink rejected %s (%s): %s\n", channel.c_str(), code.c_str(),
-                    message.c_str());
+    void rejected(const simlink::Rejection& rejection) override {
+        std::printf("Simlink rejected %s (%s): %s\n", rejection.channel.c_str(),
+                    rejection.code.c_str(), rejection.message.c_str());
+        for (const auto& issue : rejection.issues) {
+            std::printf("  %s: %s\n", issue.path.c_str(), issue.message.c_str());
+        }
         std::fflush(stdout);
     }
 };

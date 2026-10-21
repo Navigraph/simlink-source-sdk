@@ -79,9 +79,9 @@ impl StateListener for Forward<ConnectionState> {
     }
 }
 
-impl RejectionListener for Forward<(String, String, String)> {
-    fn rejected(&self, channel: String, code: String, message: String) {
-        self.send((channel, code, message));
+impl RejectionListener for Forward<Rejection> {
+    fn rejected(&self, rejection: Rejection) {
+        self.send(rejection);
     }
 }
 
@@ -251,14 +251,28 @@ fn relays_simlink_rejections() {
     source.start().unwrap();
     server.wait_for_join(WAIT).expect("the source joins");
 
-    server.send_error(json!({ "event": "telemetry.ownship", "code": "INVALID_DATA", "message": "bad transponder" }));
+    let frame = json!({
+        "event": "telemetry.ownship",
+        "code": "INVALID_DATA",
+        "message": "bad transponder",
+        "issues": [{ "code": "too_big", "message": "Too long", "path": ["aircraft", "transponder"] }],
+    });
+    assert_eq!(
+        issues(&MANIFEST["errorFrame"], &frame),
+        Vec::<String>::new()
+    );
+    server.send_error(frame);
     assert_eq!(
         rejections.recv_timeout(WAIT),
-        Ok((
-            "telemetry.ownship".into(),
-            "INVALID_DATA".into(),
-            "bad transponder".into()
-        ))
+        Ok(Rejection {
+            channel: "telemetry.ownship".into(),
+            code: "INVALID_DATA".into(),
+            message: "bad transponder".into(),
+            issues: vec![RejectionIssue {
+                path: "aircraft.transponder".into(),
+                message: "Too long".into(),
+            }],
+        })
     );
 }
 

@@ -78,8 +78,27 @@ pub trait StateListener: Send + Sync {
 /// Simlink found an emitted payload or answer invalid. Called on the SDK's thread.
 #[uniffi::export(with_foreign)]
 pub trait RejectionListener: Send + Sync {
-    /// `channel` is the event or command, `code` Simlink's error code, such as `INVALID_DATA`.
-    fn rejected(&self, channel: String, code: String, message: String);
+    fn rejected(&self, rejection: Rejection);
+}
+
+/// Why Simlink rejected a payload or answer.
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct Rejection {
+    /// The event or command.
+    pub channel: String,
+    /// Simlink's error code, such as `INVALID_DATA`.
+    pub code: String,
+    pub message: String,
+    /// Each field that failed validation.
+    pub issues: Vec<RejectionIssue>,
+}
+
+/// One field that failed validation.
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct RejectionIssue {
+    /// Where in the payload, such as `aircraft.position.latitude` or `[3].key`.
+    pub path: String,
+    pub message: String,
 }
 
 /// Log severity, most severe first.
@@ -182,11 +201,36 @@ impl Handler for Listeners {
         let Some(listener) = &self.rejected else {
             return;
         };
-        let text = |key: &str| frame[key].as_str().unwrap_or_default().to_owned();
-        shield("the rejection listener", || {
-            listener.rejected(text("event"), text("code"), text("message"))
-        });
+        let text = |value: &Value| value.as_str().unwrap_or_default().to_owned();
+        let issues = frame["issues"].as_array().map_or(&[][..], Vec::as_slice);
+        let rejection = Rejection {
+            channel: text(&frame["event"]),
+            code: text(&frame["code"]),
+            message: text(&frame["message"]),
+            issues: issues
+                .iter()
+                .map(|issue| RejectionIssue {
+                    path: issue_path(&issue["path"]),
+                    message: text(&issue["message"]),
+                })
+                .collect(),
+        };
+        shield("the rejection listener", || listener.rejected(rejection));
     }
+}
+
+/// `["aircraft", "position", "latitude"]` → `aircraft.position.latitude`, `[3, "key"]` → `[3].key`.
+fn issue_path(segments: &Value) -> String {
+    let mut path = String::new();
+    for segment in segments.as_array().into_iter().flatten() {
+        match segment {
+            Value::Number(index) => path.push_str(&format!("[{index}]")),
+            Value::String(name) if path.is_empty() => path.push_str(name),
+            Value::String(name) => path.push_str(&format!(".{name}")),
+            _ => {}
+        }
+    }
+    path
 }
 
 /// Runs a foreign callback. A C# or C++ exception arrives as a panic, which would end the SDK's thread.

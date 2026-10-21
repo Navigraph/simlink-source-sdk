@@ -40,6 +40,12 @@ class State : StateListener
 
 class Rejections : RejectionListener
 {
-    public void Rejected(string channel, string code, string message) =>
-        Console.WriteLine($"Simlink rejected {channel} ({code}): {message}");
+    public void Rejected(Rejection rejection)
+    {
+        Console.WriteLine($"Simlink rejected {rejection.Channel} ({rejection.Code}): {rejection.Message}");
+        foreach (var issue in rejection.Issues)
+        {
+            Console.WriteLine($"  {issue.Path}: {issue.Message}");
+        }
+    }
 }

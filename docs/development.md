@@ -26,7 +26,8 @@ The tests trust what is generated and check what is hand-written:
 - **The bindings work.** `cargo xtask examples` builds every Rust, C++ and C# example against the generated bindings,
   then `crates/simlink/tests/examples.rs` runs each one against the same minimal Simlink, listening on Simlink's
   default port so the unmodified examples find it by discovery. Each must join, emit valid payloads on the events it
-  declares, and answer the commands it handles. Close Simlink first: it would hold that port.
+  declares, answer the commands it handles, and survive a rejection, which the diagnostics examples must print with
+  its issues. Close Simlink first: it would hold that port.
 
 The minimal Simlink accepts any payload; the tests validate what it receives against the manifest. Its Socket.IO
 codec is written separately from the SDK's, so one misreading of the protocol can't pass on both sides.

@@ -44,7 +44,7 @@ pub trait Handler: Send + 'static {
 
     fn state(&mut self, _state: &State) {}
 
-    /// Simlink found an emitted payload or reply invalid. `frame` is its error frame: `event`, `code`, `message`.
+    /// Simlink found an emitted payload or reply invalid. `frame` is its error frame.
     fn rejected(&mut self, _frame: &Value) {}
 }
 

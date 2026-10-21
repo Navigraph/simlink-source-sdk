@@ -37,8 +37,17 @@ impl StateListener for State {
 struct Rejections;
 
 impl RejectionListener for Rejections {
-    fn rejected(&self, channel: String, code: String, message: String) {
+    fn rejected(&self, rejection: Rejection) {
+        let Rejection {
+            channel,
+            code,
+            message,
+            issues,
+        } = rejection;
         println!("Simlink rejected {channel} ({code}): {message}");
+        for issue in issues {
+            println!("  {}: {}", issue.path, issue.message);
+        }
     }
 }
 
