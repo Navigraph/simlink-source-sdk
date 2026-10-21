@@ -1,0 +1,28 @@
+[package]
+name = "simlink"
+description = "Connects a flight simulator data source to Navigraph Simlink"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+# The dynamic library is what uniffi-bindgen reads and the C# bindings load; C++ links the static one.
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+simlink-macros.workspace = true
+log.workspace = true
+mdns-sd.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tungstenite.workspace = true
+uniffi.workspace = true
+
+[features]
+# Lets the tests point a source at their own test Simlink.
+testing = []
+
+[dev-dependencies]
+jsonschema.workspace = true
+simlink = { path = ".", features = ["testing"] }

@@ -1,0 +1,5 @@
+/target
+/build
+# .NET build output next to each project.
+bin/
+obj/

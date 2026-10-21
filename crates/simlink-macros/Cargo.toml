@@ -1,0 +1,18 @@
+[package]
+name = "simlink-macros"
+description = "protocol! macro that turns Simlink's source manifest into the SDK's protocol API"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2.workspace = true
+quote.workspace = true
+schemars.workspace = true
+serde_json.workspace = true
+syn.workspace = true
+typify.workspace = true

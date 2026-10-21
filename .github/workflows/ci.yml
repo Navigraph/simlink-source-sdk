@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # rustup installs the toolchain from rust-toolchain.toml on first use.
+      - uses: Swatinem/rust-cache@v2
+
+      # The generators take minutes to compile; xtask pins them in generators.rs.
+      - uses: actions/cache@v6
+        with:
+          path: target/tools
+          key: uniffi-generators-${{ runner.os }}-${{ hashFiles('xtask/src/generators.rs') }}
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - run: cargo test --workspace --locked
+      # Builds every example against the bindings, then checks each one joins a test Simlink and answers it.
+      - run: cargo xtask examples
+      - run: cargo xtask docs --check
+        if: runner.os == 'Linux'

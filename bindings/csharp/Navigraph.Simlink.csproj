@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Connects a flight simulator data source to Navigraph Simlink.</Description>
+  </PropertyGroup>
+
+  <!-- The bindings and library from `cargo xtask build`. -->
+  <ItemGroup>
+    <Compile Include="../../target/bindings/csharp/*.cs" />
+    <None Include="../../target/release/simlink.dll" Condition="Exists('../../target/release/simlink.dll')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="../../target/release/libsimlink.so" Condition="Exists('../../target/release/libsimlink.so')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="../../target/release/libsimlink.dylib" Condition="Exists('../../target/release/libsimlink.dylib')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <!-- Fail here rather than build an empty assembly. -->
+  <Target Name="RequireBindings" BeforeTargets="CoreCompile">
+    <Error Condition="!Exists('../../target/bindings/csharp/simlink.cs')" Text="No C# bindings in target/bindings/csharp; run `cargo xtask build` first." />
+  </Target>
+
+</Project>

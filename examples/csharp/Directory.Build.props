@@ -1,0 +1,15 @@
+<!-- Shared by every C# example: a console app referencing the bindings from `cargo xtask build`. -->
+<Project>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../bindings/csharp/Navigraph.Simlink.csproj" />
+  </ItemGroup>
+
+</Project>

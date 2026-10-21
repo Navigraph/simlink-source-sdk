@@ -1,0 +1,63 @@
+//! Prints the SDK's logs, connection changes and anything Simlink rejects. Stop with Ctrl+C.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use simlink::*;
+
+struct Log;
+
+impl LogListener for Log {
+    fn log(&self, level: LogLevel, message: String) {
+        eprintln!("[{level:?}] {message}");
+    }
+}
+
+struct State;
+
+impl StateListener for State {
+    fn changed(&self, state: ConnectionState) {
+        match state {
+            ConnectionState::Searching => println!("Searching for Simlink"),
+            ConnectionState::Connected { address } => println!("Connected to {address}"),
+            ConnectionState::Rejected {
+                code,
+                message,
+                retrying,
+            } => {
+                println!(
+                    "Refused ({code}): {message}{}",
+                    if retrying { ", retrying" } else { "" }
+                )
+            }
+        }
+    }
+}
+
+struct Rejections;
+
+impl RejectionListener for Rejections {
+    fn rejected(&self, channel: String, code: String, message: String) {
+        println!("Simlink rejected {channel} ({code}): {message}");
+    }
+}
+
+fn main() -> Result<(), Error> {
+    set_logger(Arc::new(Log), LogLevel::Debug);
+
+    let options = SourceOptions {
+        id: "diagnostics".into(),
+        display_name: "Diagnostics".into(),
+        is_injecting_sim_traffic: false,
+    };
+    let source = Source::new(options, vec![Event::TelemetryTraffic]);
+    source.on_state(Arc::new(State))?;
+    source.on_rejected(Arc::new(Rejections))?;
+    source.start()?;
+
+    loop {
+        // An empty traffic picture is valid; a real source sends the aircraft around the user.
+        source.emit_telemetry_traffic(vec![])?;
+        std::thread::sleep(Duration::from_secs(1));
+    }
+}

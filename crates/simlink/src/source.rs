@@ -1,0 +1,342 @@
+//! Exported API that does not come from the protocol manifest.
+
+use std::collections::HashMap;
+use std::fmt;
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
+
+use crate::Event;
+use crate::connection::{self, Command, Connection, Handler, State};
+
+/// Why a call failed.
+#[derive(Clone, Debug, PartialEq, uniffi::Error)]
+// Plain `Error` would become C#'s `Exception`.
+#[uniffi(name = "SimlinkError")]
+pub enum Error {
+    /// A payload could not be used.
+    InvalidArgument { message: String },
+    /// The event was not declared when the source was created.
+    Undeclared { message: String },
+    /// The call needs a source that has not started, or one that has.
+    WrongState { message: String },
+    /// The command was already answered.
+    AlreadyAnswered { message: String },
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (Error::InvalidArgument { message }
+        | Error::Undeclared { message }
+        | Error::WrongState { message }
+        | Error::AlreadyAnswered { message }) = self;
+        f.write_str(message)
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<connection::Error> for Error {
+    fn from(error: connection::Error) -> Error {
+        let message = error.to_string();
+        match error {
+            connection::Error::Undeclared(_) => Error::Undeclared { message },
+            connection::Error::TooLarge(..) => Error::InvalidArgument { message },
+            // The SDK builds the descriptor and names channels itself, so these mean an SDK bug.
+            connection::Error::InvalidDescriptor(_) | connection::Error::UnknownChannel(_) => {
+                Error::InvalidArgument { message }
+            }
+        }
+    }
+}
+
+/// Where a source is in finding and joining Simlink.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum ConnectionState {
+    /// Looking for Simlink, or waiting before the next attempt.
+    Searching,
+    /// Joined Simlink at `address`.
+    Connected { address: String },
+    /// Simlink refused the handshake with one of the manifest's handshake error codes.
+    Rejected {
+        code: String,
+        message: String,
+        /// False when the refusal would repeat, such as an invalid descriptor; the source then stops.
+        retrying: bool,
+    },
+}
+
+/// Connection progress. Called on the SDK's thread.
+#[uniffi::export(with_foreign)]
+pub trait StateListener: Send + Sync {
+    fn changed(&self, state: ConnectionState);
+}
+
+/// Simlink found an emitted payload or answer invalid. Called on the SDK's thread.
+#[uniffi::export(with_foreign)]
+pub trait RejectionListener: Send + Sync {
+    /// `channel` is the event or command, `code` Simlink's error code, such as `INVALID_DATA`.
+    fn rejected(&self, channel: String, code: String, message: String);
+}
+
+/// Log severity, most severe first.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum LogLevel {
+    Error = 1,
+    Warn = 2,
+    Info = 3,
+    Debug = 4,
+    Trace = 5,
+}
+
+/// Receives SDK logs, from any thread.
+#[uniffi::export(with_foreign)]
+pub trait LogListener: Send + Sync {
+    fn log(&self, level: LogLevel, message: String);
+}
+
+struct Logger(Arc<dyn LogListener>);
+
+impl log::Log for Logger {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        metadata.level() <= log::max_level()
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        let level = match record.level() {
+            log::Level::Error => LogLevel::Error,
+            log::Level::Warn => LogLevel::Warn,
+            log::Level::Info => LogLevel::Info,
+            log::Level::Debug => LogLevel::Debug,
+            log::Level::Trace => LogLevel::Trace,
+        };
+        // Nothing to report a failing log listener to.
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            self.0.log(level, record.args().to_string())
+        }));
+    }
+
+    fn flush(&self) {}
+}
+
+/// Routes SDK logs to `listener` up to `max_level`. Only the first call per process takes effect.
+#[uniffi::export]
+pub fn set_logger(listener: Arc<dyn LogListener>, max_level: LogLevel) {
+    static LOGGER: OnceLock<Logger> = OnceLock::new();
+
+    if log::set_logger(LOGGER.get_or_init(|| Logger(listener))).is_ok() {
+        log::set_max_level(match max_level {
+            LogLevel::Error => log::LevelFilter::Error,
+            LogLevel::Warn => log::LevelFilter::Warn,
+            LogLevel::Info => log::LevelFilter::Info,
+            LogLevel::Debug => log::LevelFilter::Debug,
+            LogLevel::Trace => log::LevelFilter::Trace,
+        });
+    }
+}
+
+type CommandFn = Box<dyn Fn(Value, PendingReply) + Send + Sync>;
+
+#[derive(Default)]
+struct Listeners {
+    commands: HashMap<&'static str, CommandFn>,
+    state: Option<Arc<dyn StateListener>>,
+    rejected: Option<Arc<dyn RejectionListener>>,
+}
+
+impl Handler for Listeners {
+    fn command(&mut self, command: Command) {
+        match self.commands.get(command.name.as_str()) {
+            Some(handle) => shield(&command.name, || {
+                handle(command.input, PendingReply(Mutex::new(Some(command.reply))));
+            }),
+            None => log::warn!("No handler for {}", command.name),
+        }
+    }
+
+    fn state(&mut self, state: &State) {
+        let Some(listener) = &self.state else { return };
+        let state = match state {
+            State::Searching => ConnectionState::Searching,
+            State::Connected { address } => ConnectionState::Connected {
+                address: address.to_string(),
+            },
+            State::Rejected {
+                code,
+                message,
+                retrying,
+            } => ConnectionState::Rejected {
+                code: code.clone(),
+                message: message.clone(),
+                retrying: *retrying,
+            },
+        };
+        shield("the state listener", || listener.changed(state));
+    }
+
+    fn rejected(&mut self, frame: &Value) {
+        let Some(listener) = &self.rejected else {
+            return;
+        };
+        let text = |key: &str| frame[key].as_str().unwrap_or_default().to_owned();
+        shield("the rejection listener", || {
+            listener.rejected(text("event"), text("code"), text("message"))
+        });
+    }
+}
+
+/// Runs a foreign callback. A C# or C++ exception arrives as a panic, which would end the SDK's thread.
+fn shield(what: &str, call: impl FnOnce()) {
+    if catch_unwind(AssertUnwindSafe(call)).is_err() {
+        log::error!("{what} failed; the source carries on");
+    }
+}
+
+/// What `start` connects with, gathered while configuring.
+#[derive(Default)]
+struct Setup {
+    listeners: Listeners,
+    address: Option<String>,
+}
+
+enum Lifecycle {
+    Configuring(Setup),
+    Running(Connection),
+}
+
+/// A connection to Simlink. Register handlers and listeners, then `start`. Dropping it disconnects.
+///
+/// Handlers and listeners must not hold their `Source`: the source owns them, so it would never be dropped.
+#[derive(uniffi::Object)]
+pub struct Source {
+    options: crate::SourceOptions,
+    events: Vec<Event>,
+    lifecycle: Mutex<Lifecycle>,
+}
+
+#[uniffi::export]
+impl Source {
+    /// A source that will declare `events` and the commands it gets handlers for.
+    #[uniffi::constructor]
+    pub fn new(options: crate::SourceOptions, events: Vec<Event>) -> Source {
+        Source {
+            options,
+            events,
+            lifecycle: Mutex::new(Lifecycle::Configuring(Setup::default())),
+        }
+    }
+
+    /// Register before `start`.
+    pub fn on_state(&self, listener: Arc<dyn StateListener>) -> Result<(), Error> {
+        self.configure(|setup| setup.listeners.state = Some(listener))
+    }
+
+    /// Register before `start`.
+    pub fn on_rejected(&self, listener: Arc<dyn RejectionListener>) -> Result<(), Error> {
+        self.configure(|setup| setup.listeners.rejected = Some(listener))
+    }
+
+    /// Connects with the declared events and the commands handled so far. Keeps reconnecting until dropped.
+    pub fn start(&self) -> Result<(), Error> {
+        let mut lifecycle = self.lifecycle.lock().expect("source lock");
+        let Lifecycle::Configuring(setup) = &mut *lifecycle else {
+            return Err(Error::WrongState {
+                message: "the source is already started".into(),
+            });
+        };
+
+        let mut descriptor =
+            serde_json::to_value(&self.options).expect("options serialize to JSON");
+        let events: Vec<&str> = self.events.iter().map(|event| event.channel()).collect();
+        let commands: Vec<&str> = setup.listeners.commands.keys().copied().collect();
+        descriptor["capabilities"] = json!({ "events": events, "commands": commands });
+
+        let Setup { listeners, address } = std::mem::take(setup);
+        *lifecycle = Lifecycle::Running(Connection::start(descriptor, address, listeners)?);
+
+        Ok(())
+    }
+}
+
+impl Source {
+    /// Test-only: connects to `address` (`host:port`) instead of discovering Simlink.
+    #[cfg(feature = "testing")]
+    #[doc(hidden)]
+    pub fn set_address(&self, address: String) -> Result<(), Error> {
+        self.configure(|setup| setup.address = Some(address))
+    }
+
+    pub(crate) fn emit_json(&self, channel: &str, payload: &impl Serialize) -> Result<(), Error> {
+        let payload = serde_json::to_value(payload).map_err(|e| Error::InvalidArgument {
+            message: e.to_string(),
+        })?;
+        match &*self.lifecycle.lock().expect("source lock") {
+            Lifecycle::Running(connection) => Ok(connection.emit(channel, payload)?),
+            Lifecycle::Configuring(_) => Err(Error::WrongState {
+                message: "start the source before emitting".into(),
+            }),
+        }
+    }
+
+    pub(crate) fn handle<I: DeserializeOwned>(
+        &self,
+        channel: &'static str,
+        handler: impl Fn(I, PendingReply) + Send + Sync + 'static,
+    ) -> Result<(), Error> {
+        let handle: CommandFn = Box::new(move |input, reply| match serde_json::from_value(input) {
+            Ok(input) => handler(input, reply),
+            // Simlink validated the input, so this is an SDK and protocol version mismatch.
+            Err(error) => log::error!("Could not read {channel} input: {error}"),
+        });
+        self.configure(|setup| {
+            setup.listeners.commands.insert(channel, handle);
+        })
+    }
+
+    fn configure(&self, change: impl FnOnce(&mut Setup)) -> Result<(), Error> {
+        match &mut *self.lifecycle.lock().expect("source lock") {
+            Lifecycle::Configuring(setup) => {
+                change(setup);
+                Ok(())
+            }
+            Lifecycle::Running(_) => Err(Error::WrongState {
+                message: "register before starting the source".into(),
+            }),
+        }
+    }
+}
+
+/// One command's answer, given at most once.
+pub(crate) struct PendingReply(Mutex<Option<connection::Reply>>);
+
+impl PendingReply {
+    pub(crate) fn ok(&self, value: &impl Serialize) -> Result<(), Error> {
+        let value = serde_json::to_value(value).map_err(|e| Error::InvalidArgument {
+            message: e.to_string(),
+        })?;
+        self.take()?.ok(value);
+        Ok(())
+    }
+
+    pub(crate) fn refuse(&self, error: &impl Serialize) -> Result<(), Error> {
+        let error = serde_json::to_value(error).map_err(|e| Error::InvalidArgument {
+            message: e.to_string(),
+        })?;
+        self.take()?.refuse(error);
+        Ok(())
+    }
+
+    fn take(&self) -> Result<connection::Reply, Error> {
+        self.0
+            .lock()
+            .expect("reply lock")
+            .take()
+            .ok_or_else(|| Error::AlreadyAnswered {
+                message: "this command was already answered".into(),
+            })
+    }
+}
