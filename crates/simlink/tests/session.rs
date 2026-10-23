@@ -17,7 +17,6 @@ fn source(server: &Server, events: Vec<Event>) -> Source {
     let options = SourceOptions {
         id: "test-source".into(),
         display_name: "Test".into(),
-        is_injecting_sim_traffic: false,
     };
     let source = Source::new(options, events);
     source.set_address(server.address()).unwrap();
@@ -283,7 +282,7 @@ fn sends_the_latest_payload_at_the_rate_limit() {
     source.start().unwrap();
     server.wait_for_join(WAIT).expect("the source joins");
 
-    // Warm up until one payload gets through, then emit far faster than the 5 Hz limit for one second.
+    // Warm up until one payload gets through, then emit far faster than the 10 Hz limit for one second.
     while server.events("telemetry.ownship").is_empty() {
         source.emit_telemetry_ownship(ownship(0.0)).unwrap();
         std::thread::sleep(Duration::from_millis(20));
@@ -303,8 +302,8 @@ fn sends_the_latest_payload_at_the_rate_limit() {
     let events = server.events("telemetry.ownship");
     let sent = events.len() - before;
     assert!(
-        (3..=7).contains(&sent),
-        "{sent} payloads in a second at 5 Hz"
+        (8..=12).contains(&sent),
+        "{sent} payloads in a second at 10 Hz"
     );
     assert_eq!(
         events.last().unwrap()["aircraft"]["position"]["latitude"],
@@ -391,7 +390,6 @@ fn drops_promptly_while_searching() {
     let options = SourceOptions {
         id: "test-source".into(),
         display_name: "Test".into(),
-        is_injecting_sim_traffic: false,
     };
     let source = Source::new(options, vec![]);
     let (listener, states) = forward();

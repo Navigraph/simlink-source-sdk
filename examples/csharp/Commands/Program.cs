@@ -4,8 +4,7 @@ using Navigraph.Simlink;
 
 var options = new SourceOptions(
     Id: "commands",
-    DisplayName: "Commands",
-    IsInjectingSimTraffic: false);
+    DisplayName: "Commands");
 using var source = new Source(options, []);
 source.OnAtisGet(new Atis());
 source.OnFlightplanGet(new FlightPlans());

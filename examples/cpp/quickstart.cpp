@@ -1,4 +1,4 @@
-// Emits the aircraft's position to Simlink five times a second. Stop with Ctrl+C.
+// Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
 #include <chrono>
 #include <thread>
 
@@ -33,6 +33,6 @@ int main() {
     for (;;) {
         latitude += 0.0001;
         source->emit_telemetry_ownship(ownship(latitude, 17.9186));
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }

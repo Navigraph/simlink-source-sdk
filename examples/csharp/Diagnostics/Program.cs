@@ -6,8 +6,7 @@ Simlink.SetLogger(new ConsoleLog(), LogLevel.Debug);
 
 var options = new SourceOptions(
     Id: "diagnostics",
-    DisplayName: "Diagnostics",
-    IsInjectingSimTraffic: false);
+    DisplayName: "Diagnostics");
 using var source = new Source(options, [Event.TelemetryTraffic]);
 source.OnState(new State());
 source.OnRejected(new Rejections());

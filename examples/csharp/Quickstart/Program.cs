@@ -1,11 +1,10 @@
-// Emits the aircraft's position to Simlink five times a second. Stop with Ctrl+C.
+// Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
 
 using Navigraph.Simlink;
 
 var options = new SourceOptions(
     Id: "quickstart",
-    DisplayName: "Quickstart",
-    IsInjectingSimTraffic: false);
+    DisplayName: "Quickstart");
 using var source = new Source(options, [Event.TelemetryOwnship]);
 source.Start();
 
@@ -14,7 +13,7 @@ while (true)
 {
     latitude += 0.0001;
     source.EmitTelemetryOwnship(Ownship(latitude, 17.9186));
-    Thread.Sleep(200);
+    Thread.Sleep(100);
 }
 
 // In a real source these values come from the simulator.
@@ -25,7 +24,7 @@ static TelemetryOwnship Ownship(double latitude, double longitude)
         Altitude: new OwnshipAltitude(True: 1200, Agl: 900, Indicated: 1200, Pressure: null),
         Speed: new OwnshipSpeed(Gs: 140, Ias: 135, Tas: 138),
         Heading: new OwnshipHeading(True: 32, Magnetic: 25),
-        Track: new Track(True: 31),
+        Track: new OwnshipTrack(True: 31),
         Attitude: new OwnshipAttitude(Bank: 0, Pitch: 2.5),
         VerticalSpeed: 0,
         TurnRate: 0,
