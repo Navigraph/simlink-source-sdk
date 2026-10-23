@@ -52,7 +52,12 @@ int main() {
 
     for (;;) {
         // An empty traffic picture is valid; a real source sends the aircraft around the user.
-        source->emit_telemetry_traffic({});
+        // Emitting fails for an undeclared event, before `start`, or over Simlink's message size limit.
+        try {
+            source->emit_telemetry_traffic({});
+        } catch (const simlink::SimlinkError& error) {
+            std::printf("Could not emit: %s\n", error.what());
+        }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }

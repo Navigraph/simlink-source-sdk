@@ -15,7 +15,15 @@ source.Start();
 while (true)
 {
     // An empty traffic picture is valid; a real source sends the aircraft around the user.
-    source.EmitTelemetryTraffic([]);
+    // Emitting fails for an undeclared event, before `Start`, or over Simlink's message size limit.
+    try
+    {
+        source.EmitTelemetryTraffic([]);
+    }
+    catch (SimlinkException error)
+    {
+        Console.WriteLine($"Could not emit: {error.Message}");
+    }
     Thread.Sleep(1000);
 }
 

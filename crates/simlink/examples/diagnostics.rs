@@ -65,7 +65,10 @@ fn main() -> Result<(), Error> {
 
     loop {
         // An empty traffic picture is valid; a real source sends the aircraft around the user.
-        source.emit_telemetry_traffic(vec![])?;
+        // Emitting fails for an undeclared event, before `start`, or over Simlink's message size limit.
+        if let Err(error) = source.emit_telemetry_traffic(vec![]) {
+            println!("Could not emit: {error}");
+        }
         std::thread::sleep(Duration::from_secs(1));
     }
 }
