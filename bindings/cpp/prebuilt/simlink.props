@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adds the SDK to a Visual Studio C++ project: Property Manager → Add Existing Property Sheet. -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- By UseDebugLibraries rather than name, so custom configurations pick the right one. -->
+  <PropertyGroup>
+    <SimlinkLibraries Condition="'$(UseDebugLibraries)' == 'true'">$(MSBuildThisFileDirectory)lib\Debug</SimlinkLibraries>
+    <SimlinkLibraries Condition="'$(UseDebugLibraries)' != 'true'">$(MSBuildThisFileDirectory)lib\Release</SimlinkLibraries>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- A default; a standard set in the project itself wins. -->
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>$(SimlinkLibraries)\simlink.lib;ntdll.lib;userenv.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>

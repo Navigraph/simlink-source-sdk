@@ -29,7 +29,7 @@ Each archive also holds the [examples](#examples), ready to build against it.
 ### C++
 
 `simlink-cpp-<version>-<platform>.zip` holds the headers in `include`, a static library in `lib` (on Windows,
-`lib/Debug` and `lib/Release`), and a `CMakeLists.txt`. You need a C++20 compiler; on Windows, MSVC with the dynamic
+`lib/Debug` and `lib/Release`), a `CMakeLists.txt`, and on Windows a Visual Studio property sheet. You need a C++20 compiler; on Windows, MSVC with the dynamic
 runtime library (`/MD` and `/MDd`, Visual Studio's default). The library is static, so nothing ships alongside your
 program.
 
@@ -42,10 +42,8 @@ target_link_libraries(my_app PRIVATE simlink::simlink)
 
 **Visual Studio project**
 
-- C/C++ → General → Additional Include Directories: `<sdk>\include`
-- C/C++ → Language → C++ Language Standard: ISO C++20
-- Linker → General → Additional Library Directories: `<sdk>\lib\$(Configuration)`
-- Linker → Input → Additional Dependencies: `simlink.lib;kernel32.lib;ntdll.lib;userenv.lib;ws2_32.lib;dbghelp.lib`
+In the Property Manager, right-click your project, choose Add Existing Property Sheet, and pick `simlink.props` from
+the SDK. It adds the headers and C++20, and links the Debug or Release library to match each configuration.
 
 **Other build systems**: add `include` to the include path, and link `lib/libsimlink.a` and the system libraries
 listed in `cmake/system-libraries.cmake`.

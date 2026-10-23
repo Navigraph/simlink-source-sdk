@@ -25,6 +25,9 @@ pub fn package() -> Result<()> {
     let archive = Archive::new(format!("simlink-cpp-{VERSION}-{}", library.rid))?;
 
     archive.add("bindings/cpp/prebuilt/CMakeLists.txt", "")?;
+    if cfg!(windows) {
+        archive.add("bindings/cpp/prebuilt/simlink.props", "")?;
+    }
     archive.add("bindings/cpp/cmake/system-libraries.cmake", "cmake")?;
     for header in ["simlink.hpp", "simlink_scaffolding.hpp"] {
         archive.add(Path::new("target/bindings/cpp").join(header), "include")?;
