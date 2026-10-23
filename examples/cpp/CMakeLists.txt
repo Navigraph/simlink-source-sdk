@@ -6,7 +6,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin")
 
 add_subdirectory(../../bindings/cpp simlink)
 
-foreach(example quickstart commands diagnostics)
+foreach(example quickstart traffic commands diagnostics)
   add_executable(${example} ${example}.cpp)
   target_link_libraries(${example} PRIVATE simlink::simlink)
 endforeach()

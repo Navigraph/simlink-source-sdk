@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use crate::{bindings, cargo, executable, run};
 
-const EXAMPLES: [&str; 3] = ["quickstart", "commands", "diagnostics"];
+const EXAMPLES: [&str; 4] = ["quickstart", "traffic", "commands", "diagnostics"];
 
 /// Builds every example, then `crates/simlink/tests/examples.rs` checks that each joins a test Simlink and
 /// answers it.

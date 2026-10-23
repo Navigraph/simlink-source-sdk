@@ -1,13 +1,13 @@
-// Answers Simlink's ATIS and flight plan commands. Stop with Ctrl+C.
+// Answers Simlink's ATIS command, refusing airports without one. Stop with Ctrl+C.
 
 using Navigraph.Simlink;
 
 var options = new SourceOptions(
     Id: "commands",
     DisplayName: "Commands");
+// Commands are declared by registering their handlers, so this source declares no events.
 using var source = new Source(options, []);
 source.OnAtisGet(new Atis());
-source.OnFlightplanGet(new FlightPlans());
 source.Start();
 
 Thread.Sleep(Timeout.Infinite);
@@ -18,35 +18,45 @@ class Atis : AtisGetHandler
     {
         using (reply)
         {
-            if (input.Icao != "ESSA")
+            // Answering twice throws SimlinkException.
+            try
             {
-                reply.Refuse(AtisGetError.AtisNotAvailable);
-                return;
+                if (Reports(input.Icao) is { } reports)
+                {
+                    reply.Ok(reports);
+                }
+                else
+                {
+                    reply.Refuse(AtisGetError.AtisNotAvailable);
+                }
             }
-
-            reply.Ok([
-                new AtisReport(
-                    Icao: input.Icao,
-                    Type: AtisReportType.Arr,
-                    Letter: "A",
-                    Phonetic: "Alpha",
-                    Message: "Stockholm Arlanda information Alpha",
-                    DateIssued: "2026-10-19T12:00:00Z",
-                    ArrivingRunways: ["19R"],
-                    DepartingRunways: ["19L"]),
-            ]);
+            catch (SimlinkException error)
+            {
+                Console.Error.WriteLine($"Could not answer atis.get: {error.Message}");
+            }
         }
     }
-}
 
-class FlightPlans : FlightplanGetHandler
-{
-    public void Handle(FlightplanGetInput input, FlightplanGetReply reply)
-    {
-        using (reply)
-        {
-            // No flight plans here; a real source looks each key up.
-            reply.Ok(input.Keys.ToDictionary(key => key, FlightPlan? (_) => null));
-        }
-    }
+    // The airport's current ATIS broadcasts, if it has any.
+    static AtisReport[]? Reports(string icao) => icao != "ESSA" ? null :
+    [
+        new AtisReport(
+            Icao: icao,
+            Type: AtisReportType.Arr,
+            Letter: "A",
+            Phonetic: "Alpha",
+            Message: "Stockholm Arlanda arrival information Alpha",
+            DateIssued: "2026-10-19T12:00:00Z",
+            ArrivingRunways: ["19R"],
+            DepartingRunways: []),
+        new AtisReport(
+            Icao: icao,
+            Type: AtisReportType.Dep,
+            Letter: "B",
+            Phonetic: "Bravo",
+            Message: "Stockholm Arlanda departure information Bravo",
+            DateIssued: "2026-10-19T12:00:00Z",
+            ArrivingRunways: [],
+            DepartingRunways: ["19L"]),
+    ];
 }
