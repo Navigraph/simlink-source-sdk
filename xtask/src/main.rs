@@ -4,8 +4,9 @@ mod bindings;
 mod docs;
 mod examples;
 mod generators;
+mod package;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
@@ -30,6 +31,23 @@ enum Task {
         #[arg(long)]
         check: bool,
     },
+    /// Build a release archive into target/package
+    #[command(subcommand)]
+    Package(Package),
+}
+
+#[derive(Subcommand)]
+enum Package {
+    /// This platform's C++ archive
+    Cpp,
+    /// This platform's library, for `package csharp --runtimes` on one machine
+    CsharpRuntime,
+    /// The C# archive
+    Csharp {
+        /// Holds `<rid>/native/<library>` for each platform; without it, only this platform's is packed
+        #[arg(long)]
+        runtimes: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -44,6 +62,11 @@ fn main() -> Result<()> {
         Task::Build => bindings::build(),
         Task::Examples => examples::check(),
         Task::Docs { check } => docs::update(check),
+        Task::Package(Package::Cpp) => package::cpp::package(),
+        Task::Package(Package::CsharpRuntime) => package::csharp::runtime(),
+        Task::Package(Package::Csharp { runtimes }) => {
+            package::csharp::package(runtimes.as_deref())
+        }
     }
 }
 

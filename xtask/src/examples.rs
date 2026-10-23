@@ -7,19 +7,26 @@ use anyhow::Result;
 
 use crate::{bindings, cargo, executable, run};
 
-const EXAMPLES: [&str; 4] = ["quickstart", "traffic", "commands", "diagnostics"];
+pub const EXAMPLES: [&str; 4] = ["quickstart", "traffic", "commands", "diagnostics"];
 
-/// Builds every example, then `crates/simlink/tests/examples.rs` checks that each joins a test Simlink and
-/// answers it.
+/// Builds every example, then tests them.
 pub fn check() -> Result<()> {
-    let programs = build()?;
+    test(&build()?)
+}
+
+/// `crates/simlink/tests/examples.rs` checks that each example program joins a test Simlink and answers it.
+pub fn test(programs: &[PathBuf]) -> Result<()> {
+    let programs = programs
+        .iter()
+        .map(std::path::absolute)
+        .collect::<std::io::Result<Vec<_>>>()?;
 
     run(cargo("test")
         .args(["-p", "simlink", "--test", "examples", "--", "--ignored"])
         .env("SIMLINK_EXAMPLES", std::env::join_paths(&programs)?))
 }
 
-/// Builds every example in release. Returns the programs by absolute path.
+/// Builds every example in release. Returns the programs.
 fn build() -> Result<Vec<PathBuf>> {
     bindings::build()?;
     run(cargo("build").args(["--release", "-p", "simlink", "--examples"]))?;
@@ -39,14 +46,11 @@ fn build() -> Result<Vec<PathBuf>> {
         programs.push(csharp.join(executable(&name)));
     }
 
-    Ok(programs
-        .into_iter()
-        .map(std::path::absolute)
-        .collect::<std::io::Result<_>>()?)
+    Ok(programs)
 }
 
 /// Configures and builds a CMake project in release. Returns the directory holding its executables.
-fn cmake(source: &Path, out: &Path) -> Result<PathBuf> {
+pub fn cmake(source: &Path, out: &Path) -> Result<PathBuf> {
     run(Command::new("cmake")
         .arg("-S")
         .arg(source)
@@ -63,7 +67,7 @@ fn cmake(source: &Path, out: &Path) -> Result<PathBuf> {
 }
 
 /// Builds a .NET project in release into `out`.
-fn dotnet(project: &Path, out: &Path) -> Result<()> {
+pub fn dotnet(project: &Path, out: &Path) -> Result<()> {
     run(Command::new("dotnet")
         .arg("build")
         .arg(project)
@@ -72,6 +76,6 @@ fn dotnet(project: &Path, out: &Path) -> Result<()> {
 }
 
 /// `quickstart` → `Quickstart`, the C# project for a Rust and C++ example.
-fn pascal(name: &str) -> String {
+pub fn pascal(name: &str) -> String {
     name[..1].to_uppercase() + &name[1..]
 }

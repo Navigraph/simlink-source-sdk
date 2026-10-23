@@ -7,7 +7,15 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Description>Connects a flight simulator data source to Navigraph Simlink.</Description>
+    <Authors>Navigraph</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Navigraph/simlink-source-sdk</RepositoryUrl>
   </PropertyGroup>
+
+  <!-- `runtimes/<rid>/native/<library>` for each platform, from `cargo xtask package csharp-runtime`. -->
+  <ItemGroup Condition="'$(SimlinkRuntimes)' != ''">
+    <None Include="$(SimlinkRuntimes)/**/*" Pack="true" PackagePath="runtimes" Visible="false" />
+  </ItemGroup>
 
   <!-- The bindings and library from `cargo xtask build`. -->
   <ItemGroup>

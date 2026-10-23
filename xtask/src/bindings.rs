@@ -55,7 +55,7 @@ fn install(generator: &Generator) -> Result<PathBuf> {
     Ok(exe)
 }
 
-fn dynamic_library() -> String {
+pub fn dynamic_library() -> String {
     format!(
         "{}simlink{}",
         std::env::consts::DLL_PREFIX,
