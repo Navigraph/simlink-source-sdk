@@ -20,14 +20,7 @@ add_library(simlink::simlink ALIAS simlink)
 target_compile_features(simlink PUBLIC cxx_std_20)
 target_include_directories(simlink PUBLIC "${SIMLINK_BINDINGS_DIR}")
 
-# From `cargo rustc -- --print native-static-libs`.
-if(WIN32)
-  target_link_libraries(simlink PUBLIC "${SIMLINK_LIBRARY_DIR}/simlink.lib"
-    kernel32 ntdll userenv ws2_32 dbghelp)
-elseif(APPLE)
-  target_link_libraries(simlink PUBLIC "${SIMLINK_LIBRARY_DIR}/libsimlink.a"
-    iconv)
-else()
-  target_link_libraries(simlink PUBLIC "${SIMLINK_LIBRARY_DIR}/libsimlink.a"
-    gcc_s util rt pthread m dl)
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/system-libraries.cmake")
+target_link_libraries(simlink PUBLIC
+  "${SIMLINK_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}simlink${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  ${SIMLINK_SYSTEM_LIBRARIES})
