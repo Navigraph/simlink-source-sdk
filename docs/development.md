@@ -7,6 +7,7 @@ cargo test --workspace      # unit, schema round-trip and session tests
 cargo xtask build           # libraries into target/release, C++ and C# bindings into target/bindings
 cargo xtask examples        # build every example and check each joins a test Simlink
 cargo xtask docs [--check]  # copy example code into the README's snippets
+cargo xtask package ...     # release archives; see Releasing
 ```
 
 CI (`.github/workflows/ci.yml`) runs the tests and the examples on Windows, Linux and macOS, and the snippet check on
@@ -35,3 +36,10 @@ codec is written separately from the SDK's, so one misreading of the protocol ca
 ## Protocol updates
 
 `protocol/source-schema.json` arrives as pull requests from the Simlink repository; see `protocol/README.md`.
+
+## Releasing
+
+Bump `version` in `Cargo.toml`, merge, and push a matching tag such as `v1.0.0-rc1`; a tag with a `-` is a
+prerelease. `.github/workflows/release.yml` runs `cargo xtask package cpp` and `package csharp-runtime` on each
+platform, then `package csharp --runtimes` to pack every platform's library into the C# archive. Each package task
+tests its archive's examples.

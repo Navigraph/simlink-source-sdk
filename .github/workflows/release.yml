@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  platform:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the tag matches the version
+        shell: bash
+        run: |
+          version=$(cargo pkgid -p simlink | sed 's/.*[#@]//')
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $version in Cargo.toml"
+            exit 1
+          fi
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/cache@v6
+        with:
+          path: target/tools
+          key: uniffi-generators-${{ runner.os }}-${{ hashFiles('xtask/src/generators.rs') }}
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - run: cargo test --workspace --locked
+      - run: cargo xtask examples
+      # Each package task builds and runs its archive's own examples.
+      - run: cargo xtask package cpp
+      - run: cargo xtask package csharp-runtime
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cpp-${{ runner.os }}
+          path: target/package/*.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: csharp-runtime-${{ runner.os }}
+          path: target/package/runtimes
+          if-no-files-found: error
+
+  release:
+    needs: platform
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/cache@v6
+        with:
+          path: target/tools
+          key: uniffi-generators-${{ runner.os }}-${{ hashFiles('xtask/src/generators.rs') }}
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: cpp-*
+          path: target/package
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: csharp-runtime-*
+          path: target/package/runtimes
+          merge-multiple: true
+
+      - run: cargo xtask package csharp --runtimes target/package/runtimes
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A tag like v1.0.0-rc1 is a prerelease.
+          prerelease=$([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease || true)
+          gh release create "$GITHUB_REF_NAME" $prerelease --verify-tag --generate-notes target/package/*.zip
