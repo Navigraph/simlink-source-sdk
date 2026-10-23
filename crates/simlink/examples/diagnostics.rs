@@ -57,7 +57,6 @@ fn main() -> Result<(), Error> {
     let options = SourceOptions {
         id: "diagnostics".into(),
         display_name: "Diagnostics".into(),
-        is_injecting_sim_traffic: false,
     };
     let source = Source::new(options, vec![Event::TelemetryTraffic]);
     source.on_state(Arc::new(State))?;

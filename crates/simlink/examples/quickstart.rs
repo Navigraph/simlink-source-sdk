@@ -1,4 +1,4 @@
-//! Emits the aircraft's position to Simlink five times a second. Stop with Ctrl+C.
+//! Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
 
 use std::time::Duration;
 
@@ -8,7 +8,6 @@ fn main() -> Result<(), Error> {
     let options = SourceOptions {
         id: "quickstart".into(),
         display_name: "Quickstart".into(),
-        is_injecting_sim_traffic: false,
     };
     let source = Source::new(options, vec![Event::TelemetryOwnship]);
     source.start()?;
@@ -17,7 +16,7 @@ fn main() -> Result<(), Error> {
     loop {
         latitude += 0.0001;
         source.emit_telemetry_ownship(ownship(latitude, 17.9186))?;
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -44,7 +43,7 @@ fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnship {
                 true_: 32.0,
                 magnetic: 25.0,
             },
-            track: Track { true_: 31.0 },
+            track: OwnshipTrack { true_: 31.0 },
             attitude: OwnshipAttitude {
                 bank: 0.0,
                 pitch: 2.5,

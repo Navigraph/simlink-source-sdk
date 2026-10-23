@@ -47,7 +47,6 @@ fn main() -> Result<(), Error> {
     let options = SourceOptions {
         id: "commands".into(),
         display_name: "Commands".into(),
-        is_injecting_sim_traffic: false,
     };
     let source = Source::new(options, vec![]);
     source.on_atis_get(Arc::new(Atis))?;

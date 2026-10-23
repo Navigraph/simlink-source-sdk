@@ -230,7 +230,6 @@ mod tests {
             "id": "test-source",
             "displayName": "Test",
             "capabilities": { "events": events, "commands": ["atis.get"] },
-            "isInjectingSimTraffic": false,
         })
     }
 

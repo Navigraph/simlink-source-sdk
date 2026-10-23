@@ -39,7 +39,7 @@
     "telemetry.ownship": {
       "origin": "source",
       "description": "Reports the source's current ownship state",
-      "maxRateHz": 5,
+      "maxRateHz": 10,
       "payload": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -70,7 +70,7 @@
                 "$ref": "#/$defs/OwnshipHeading"
               },
               "track": {
-                "$ref": "#/$defs/Track"
+                "$ref": "#/$defs/OwnshipTrack"
               },
               "attitude": {
                 "$ref": "#/$defs/OwnshipAttitude"
@@ -227,7 +227,7 @@
               "magnetic"
             ]
           },
-          "Track": {
+          "OwnshipTrack": {
             "type": "object",
             "properties": {
               "true": {
@@ -542,17 +542,12 @@
           "commands"
         ],
         "description": "Declared event and command capabilities"
-      },
-      "isInjectingSimTraffic": {
-        "type": "boolean",
-        "description": "Whether this source injects simulated traffic into the simulator"
       }
     },
     "required": [
       "id",
       "displayName",
-      "capabilities",
-      "isInjectingSimTraffic"
+      "capabilities"
     ],
     "description": "Source identity and capabilities"
   },
