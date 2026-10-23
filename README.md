@@ -12,39 +12,165 @@
   <p>Connect a flight simulator, add-on or tool to Navigraph Simlink v2 as a <strong>source</strong>: emit telemetry and answer commands without implementing the Simlink protocol yourself.</p>
 </div>
 
-## Languages
+## What it does
 
-| Language | Where |
-| --- | --- |
-| Rust | `crates/simlink` |
-| C++20 | `bindings/cpp` (CMake target `simlink::simlink`) |
-| C# (.NET 10) | `bindings/csharp` |
+A source tells Simlink about the simulator. It declares the events it emits, such as the aircraft's position and the
+traffic around it, and the commands it answers, such as ATIS and flight plan lookups. The SDK finds Simlink on this
+machine or the network, joins, reconnects whenever Simlink restarts, and sends each event no faster than its rate
+limit, latest payload first.
 
-It runs on 64-bit Windows, Linux and macOS.
+It runs on x64 Windows and Linux, and on macOS (Apple silicon and Intel), from C++, C# and Rust.
 
-## Building
+## Installing
 
-You need [Rust](https://rustup.rs) (the pinned toolchain installs itself), plus CMake 3.20 and a C++20 compiler for
-C++, or the .NET 10 SDK for C#. Then:
+Download the SDK for your language from the [releases](https://github.com/Navigraph/simlink-source-sdk/releases).
+Each archive also holds the [examples](#examples), ready to build against it.
 
-```sh
-cargo xtask build
+### C++
+
+`simlink-cpp-<version>-<platform>.zip` holds the headers in `include`, a static library in `lib` (on Windows,
+`lib/Debug` and `lib/Release`), and a `CMakeLists.txt`. You need a C++20 compiler; on Windows, MSVC with the dynamic
+runtime library (`/MD` and `/MDd`, Visual Studio's default). The library is static, so nothing ships alongside your
+program.
+
+**CMake**
+
+```cmake
+add_subdirectory(path/to/simlink-cpp-<version>-<platform> simlink)
+target_link_libraries(my_app PRIVATE simlink::simlink)
 ```
 
-This builds the library into `target/release` and generates the C++ and C# bindings into `target/bindings`. The first
-run also installs the binding generators, which takes a few minutes.
+**Visual Studio project**
+
+- C/C++ → General → Additional Include Directories: `<sdk>\include`
+- C/C++ → Language → C++ Language Standard: ISO C++20
+- Linker → General → Additional Library Directories: `<sdk>\lib\$(Configuration)`
+- Linker → Input → Additional Dependencies: `simlink.lib;kernel32.lib;ntdll.lib;userenv.lib;ws2_32.lib;dbghelp.lib`
+
+**Other build systems**: add `include` to the include path, and link `lib/libsimlink.a` and the system libraries
+listed in `cmake/system-libraries.cmake`.
+
+### C#
+
+`simlink-csharp-<version>.zip` holds the `Navigraph.Simlink` NuGet package. It targets .NET Standard 2.0, for .NET 6+
+and .NET Framework 4.7.2+.
+
+1. Copy `Navigraph.Simlink.<version>.nupkg` into a folder in your repository, such as `packages`.
+2. Add that folder as a package source in a `nuget.config` next to your solution:
+
+   ```xml
+   <configuration>
+     <packageSources>
+       <add key="simlink" value="packages" />
+     </packageSources>
+   </configuration>
+   ```
+
+3. `dotnet add package Navigraph.Simlink --version <version>`
+
+The package carries the native library for every platform, and builds copy the right one. On .NET Framework, set
+`<PlatformTarget>x64</PlatformTarget>`: NuGet only copies the library for an x64 build. A single-file publish needs
+`<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>`.
+
+### Rust
+
+The crate isn't on crates.io yet:
+
+```toml
+simlink = { git = "https://github.com/Navigraph/simlink-source-sdk", tag = "v<version>" }
+```
 
 ## Using it
 
-A source declares the events it emits and registers handlers for the commands it answers, then starts. The SDK finds
-Simlink on this machine or the network, joins, reconnects whenever Simlink restarts, and sends each event no faster
-than its rate limit, latest payload first. An emit larger than Simlink's message size limit fails with an error rather
-than being sent, since Simlink would drop the connection.
+Each quickstart emits the aircraft's position ten times a second.
 
-Each source runs one background thread. Handlers and listeners run on it, so keep them short. To answer a slow
-command, keep its reply and answer from any thread once the result is ready. Emitting is thread-safe too.
+**C++**
 
-### Rust
+<!-- snippet: examples/cpp/quickstart.cpp -->
+```cpp
+// Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
+#include <chrono>
+#include <thread>
+
+#include <simlink.hpp>
+
+// In a real source these values come from the simulator.
+simlink::TelemetryOwnship ownship(double latitude, double longitude) {
+    simlink::TelemetryOwnship ownship{};
+    auto& aircraft = ownship.aircraft;
+    aircraft.position = {latitude, longitude};
+    aircraft.altitude.true_ = 1200;
+    aircraft.altitude.agl = 900;
+    aircraft.altitude.indicated = 1200;
+    aircraft.speed = {.gs = 140, .ias = 135, .tas = 138};
+    aircraft.heading = {.magnetic = 25, .true_ = 32};
+    aircraft.track.true_ = 31;
+    aircraft.attitude = {.bank = 0, .pitch = 2.5};
+    aircraft.gforce = 1;
+    aircraft.transponder = "7000";
+    return ownship;
+}
+
+int main() {
+    simlink::SourceOptions options{};
+    options.id = "quickstart";
+    options.display_name = "Quickstart";
+
+    auto source = simlink::Source::init(options, {simlink::Event::kTelemetryOwnship});
+    source->start();
+
+    double latitude = 59.6519;
+    for (;;) {
+        latitude += 0.0001;
+        source->emit_telemetry_ownship(ownship(latitude, 17.9186));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+```
+
+**C#**
+
+<!-- snippet: examples/csharp/Quickstart/Program.cs -->
+```csharp
+// Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
+
+using Navigraph.Simlink;
+
+var options = new SourceOptions(
+    Id: "quickstart",
+    DisplayName: "Quickstart");
+using var source = new Source(options, [Event.TelemetryOwnship]);
+source.Start();
+
+var latitude = 59.6519;
+while (true)
+{
+    latitude += 0.0001;
+    source.EmitTelemetryOwnship(Ownship(latitude, 17.9186));
+    Thread.Sleep(100);
+}
+
+// In a real source these values come from the simulator.
+static TelemetryOwnship Ownship(double latitude, double longitude)
+{
+    var aircraft = new TelemetryOwnshipAircraft(
+        Position: new Coordinates(Latitude: latitude, Longitude: longitude),
+        Altitude: new OwnshipAltitude(True: 1200, Agl: 900, Indicated: 1200, Pressure: null),
+        Speed: new OwnshipSpeed(Gs: 140, Ias: 135, Tas: 138),
+        Heading: new OwnshipHeading(True: 32, Magnetic: 25),
+        Track: new OwnshipTrack(True: 31),
+        Attitude: new OwnshipAttitude(Bank: 0, Pitch: 2.5),
+        VerticalSpeed: 0,
+        TurnRate: 0,
+        Gforce: 1,
+        Transponder: "7000");
+    var simulation = new TelemetryOwnshipSimulation(Paused: false, Slew: false, Time: null);
+
+    return new TelemetryOwnship(Aircraft: aircraft, Simulation: simulation);
+}
+```
+
+**Rust**
 
 <!-- snippet: crates/simlink/examples/quickstart.rs -->
 ```rust
@@ -112,126 +238,98 @@ fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnship {
 }
 ```
 
-### C++
+### Starting a source
 
-<!-- snippet: examples/cpp/quickstart.cpp -->
-```cpp
-// Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
-#include <chrono>
-#include <thread>
+Create a `Source` with its id, display name and the events it emits. Register a handler for each command it answers,
+and any listeners, then start it. Registering after starting fails. Dropping the source (disposing it in C#,
+releasing the last `shared_ptr` in C++) disconnects.
 
-#include <simlink.hpp>
+Handlers and listeners must not hold their `Source`: the source owns them, so it would never be released.
 
-// In a real source these values come from the simulator.
-simlink::TelemetryOwnship ownship(double latitude, double longitude) {
-    simlink::TelemetryOwnship ownship{};
-    auto& aircraft = ownship.aircraft;
-    aircraft.position = {latitude, longitude};
-    aircraft.altitude.true_ = 1200;
-    aircraft.altitude.agl = 900;
-    aircraft.altitude.indicated = 1200;
-    aircraft.speed = {.gs = 140, .ias = 135, .tas = 138};
-    aircraft.heading = {.magnetic = 25, .true_ = 32};
-    aircraft.track.true_ = 31;
-    aircraft.attitude = {.bank = 0, .pitch = 2.5};
-    aircraft.gforce = 1;
-    aircraft.transponder = "7000";
-    return ownship;
-}
+### Emitting events
 
-int main() {
-    simlink::SourceOptions options{};
-    options.id = "quickstart";
-    options.display_name = "Quickstart";
+Each declared event has an emit method, such as `emit_telemetry_ownship`. Emit whenever you have new data; the SDK
+sends the latest payload no faster than the event's rate limit (10 Hz for ownship, 1 Hz for traffic) and drops the ones
+in between. Emitting an undeclared event, before starting, or a payload larger than Simlink's message size limit fails.
 
-    auto source = simlink::Source::init(options, {simlink::Event::kTelemetryOwnship});
-    source->start();
+### Answering commands
 
-    double latitude = 59.6519;
-    for (;;) {
-        latitude += 0.0001;
-        source->emit_telemetry_ownship(ownship(latitude, 17.9186));
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-}
-```
+Each handler gets the command's input and a reply. Answer once, either with a result or by refusing with one of the
+command's error codes, within the command's timeout; the method docs give each timeout. Answering twice fails. In C#,
+dispose the reply once answered.
 
-Add `add_subdirectory(path/to/simlink-source-sdk/bindings/cpp simlink)` to your CMake project and link
-`simlink::simlink`. Every call throws `simlink::SimlinkError`.
+### Diagnostics
 
-### C#
+- **State listener**: searching, connected, or refused by Simlink, with whether the SDK is retrying.
+- **Rejection listener**: Simlink found a payload or answer invalid, with the path and reason for each field.
+- **`set_logger`**: the SDK's own logs, up to a level. Only the first call per process takes effect.
 
-<!-- snippet: examples/csharp/Quickstart/Program.cs -->
-```csharp
-// Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
+### Threading
 
-using Navigraph.Simlink;
+Each source runs one background thread. Handlers and listeners run on it, so keep them short, and in a UI app hand
+results to the UI thread yourself. Emitting and answering are thread-safe: to answer a slow command, keep its reply and
+answer from any thread once the result is ready.
 
-var options = new SourceOptions(
-    Id: "quickstart",
-    DisplayName: "Quickstart");
-using var source = new Source(options, [Event.TelemetryOwnship]);
-source.Start();
+### Errors
 
-var latitude = 59.6519;
-while (true)
-{
-    latitude += 0.0001;
-    source.EmitTelemetryOwnship(Ownship(latitude, 17.9186));
-    Thread.Sleep(100);
-}
+| Language | Type | Cases |
+| --- | --- | --- |
+| C++ | `simlink::SimlinkError` (thrown) | `InvalidArgument`, `Undeclared`, `WrongState`, `AlreadyAnswered`, as subclasses in `simlink::simlink_error` |
+| C# | `SimlinkException` (thrown) | The same, as nested classes such as `SimlinkException.WrongState` |
+| Rust | `simlink::Error` (returned) | The same, as variants |
 
-// In a real source these values come from the simulator.
-static TelemetryOwnship Ownship(double latitude, double longitude)
-{
-    var aircraft = new TelemetryOwnshipAircraft(
-        Position: new Coordinates(Latitude: latitude, Longitude: longitude),
-        Altitude: new OwnshipAltitude(True: 1200, Agl: 900, Indicated: 1200, Pressure: null),
-        Speed: new OwnshipSpeed(Gs: 140, Ias: 135, Tas: 138),
-        Heading: new OwnshipHeading(True: 32, Magnetic: 25),
-        Track: new OwnshipTrack(True: 31),
-        Attitude: new OwnshipAttitude(Bank: 0, Pitch: 2.5),
-        VerticalSpeed: 0,
-        TurnRate: 0,
-        Gforce: 1,
-        Transponder: "7000");
-    var simulation = new TelemetryOwnshipSimulation(Paused: false, Slew: false, Time: null);
+### Names in each language
 
-    return new TelemetryOwnship(Aircraft: aircraft, Simulation: simulation);
-}
-```
-
-Reference `bindings/csharp/Navigraph.Simlink.csproj` and ship `simlink.dll` (or `libsimlink.so`/`.dylib`) next to
-your app. Every call throws `SimlinkException`.
+The types and methods are the same in every language, in its own casing: `emit_telemetry_ownship` in C++ and Rust,
+`EmitTelemetryOwnship` in C#. In C++ and Rust, a field named after a keyword gets a suffix, such as `true_`.
 
 ## Examples
 
-Each example exists in Rust (`crates/simlink/examples`), C++ (`examples/cpp`) and C# (`examples/csharp`):
+The examples cover the whole SDK, in C++, C# and Rust:
 
-- **quickstart** emits the aircraft's position.
-- **commands** answers `atis.get` and `flightplan.get`.
-- **diagnostics** prints the SDK's logs, connection changes and anything Simlink rejects.
+- **quickstart** emits the aircraft's position, `telemetry.ownship`.
+- **traffic** emits the aircraft around it, `telemetry.traffic`, identified by type or by category, and answers
+  `flightplan.get` for them.
+- **commands** answers `atis.get`, refusing airports without an ATIS.
+- **diagnostics** prints the SDK's logs, connection changes, anything Simlink rejects, and failed emits.
 
-Each one finds a running Simlink on this machine or the network and runs until you stop it with Ctrl+C. Run them
-from the repository root.
+Each one finds a running Simlink on this machine or the network and runs until you stop it with Ctrl+C. In the
+unzipped C++ archive:
 
-**Rust**
+```sh
+cmake -S examples -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+build/bin/quickstart
+```
+
+In the unzipped C# archive:
+
+```sh
+dotnet run -c Release --project examples/Quickstart
+```
+
+## Building from source
+
+You need [Rust](https://rustup.rs) (the pinned toolchain installs itself), plus CMake 3.20 and a C++20 compiler for
+C++, or the .NET 10 SDK for C#. Then:
+
+```sh
+cargo xtask build
+```
+
+This builds the library into `target/release` and generates the C++ and C# bindings into `target/bindings`. The first
+run also installs the binding generators, which takes a few minutes. Link `bindings/cpp` with CMake as above, or
+reference `bindings/csharp/Navigraph.Simlink.csproj`.
+
+The examples live in `examples/cpp`, `examples/csharp` and `crates/simlink/examples`. From the repository root:
 
 ```sh
 cargo run --release -p simlink --example quickstart
-```
 
-**C++**, after `cargo xtask build`:
-
-```sh
 cmake -S examples/cpp -B target/examples/cpp -DCMAKE_BUILD_TYPE=Release
 cmake --build target/examples/cpp --config Release
 target/examples/cpp/bin/quickstart
-```
 
-**C#**, after `cargo xtask build`:
-
-```sh
 dotnet run -c Release --project examples/csharp/Quickstart
 ```
 
