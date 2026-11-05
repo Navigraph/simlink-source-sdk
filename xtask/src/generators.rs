@@ -28,9 +28,9 @@ impl Pin {
 pub const GENERATORS: [Generator; 2] = [
     Generator {
         name: "uniffi-bindgen-cs",
-        // Our fork's main: v0.11.1+v0.31.0 plus fixes for sibling variant collisions and doc comment warnings.
+        // Our fork's main: v0.11.1+v0.31.0 plus fixes for sibling variant collisions, doc comment warnings, and IL2CPP callbacks.
         repository: "https://github.com/Navigraph/uniffi-bindgen-cs",
-        pin: Pin::Rev("abaee8c795e18c57d38c522028d94a37730dd987"),
+        pin: Pin::Rev("55b78d9df5ad36a9b50d4d1173a73b2248bf57e6"),
         // Without `--no-format` the output depends on whether CSharpier is installed.
         args: &["--config", "crates/simlink/uniffi.toml", "--no-format"],
         out: "csharp",
