@@ -1,5 +1,7 @@
 // Prints the SDK's logs, connection changes and anything Simlink rejects. Stop with Ctrl+C.
 
+using System.Diagnostics;
+
 using Navigraph.Simlink.SourceSdk;
 
 SimlinkSourceSdk.SetLogger(new ConsoleLog(), LogLevel.Debug);
@@ -37,11 +39,12 @@ class State : StateListener
 {
     public void Changed(ConnectionState state) => Console.WriteLine(state switch
     {
+        ConnectionState.Searching => "Searching for Simlink",
         ConnectionState.Connected connected => $"Connected to {connected.Address}",
         ConnectionState.Rejected rejected =>
             $"Refused ({rejected.Code}): {rejected.Message}"
                 + (rejected.Retrying ? ", retrying" : ""),
-        _ => "Searching for Simlink",
+        _ => throw new UnreachableException(),
     });
 }
 

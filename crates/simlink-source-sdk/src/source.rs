@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use crate::Event;
-use crate::connection::{self, Command, Connection, Handler, State};
+use crate::connection::{self, Command, Connection, Handler};
 
 /// Why a call failed.
 #[derive(Clone, Debug, PartialEq, uniffi::Error)]
@@ -177,23 +177,8 @@ impl Handler for Listeners {
         }
     }
 
-    fn state(&mut self, state: &State) {
+    fn state(&mut self, state: ConnectionState) {
         let Some(listener) = &self.state else { return };
-        let state = match state {
-            State::Searching => ConnectionState::Searching,
-            State::Connected { address } => ConnectionState::Connected {
-                address: address.to_string(),
-            },
-            State::Rejected {
-                code,
-                message,
-                retrying,
-            } => ConnectionState::Rejected {
-                code: code.clone(),
-                message: message.clone(),
-                retrying: *retrying,
-            },
-        };
         shield("the state listener", || listener.changed(state));
     }
 

@@ -2,12 +2,12 @@
 
 use std::collections::HashSet;
 use std::fmt;
-use std::net::SocketAddr;
 use std::sync::mpsc::{self, Sender};
 use std::thread::JoinHandle;
 
 use serde_json::{Value, json};
 
+use crate::ConnectionState;
 use crate::protocol::{COMMANDS, EVENTS, MAX_PAYLOAD_BYTES, NAMESPACE};
 use crate::wire;
 use crate::worker::{Op, Worker};
@@ -20,29 +20,12 @@ pub struct EventInfo {
     pub max_rate_hz: Option<f64>,
 }
 
-/// Connection progress, reported through [`Handler::state`].
-#[derive(Clone, Debug, PartialEq)]
-pub enum State {
-    /// Looking for Simlink, or waiting before the next attempt.
-    Searching,
-    Connected {
-        address: SocketAddr,
-    },
-    /// Simlink refused the handshake.
-    Rejected {
-        code: String,
-        message: String,
-        /// False when the refusal would repeat, such as an invalid descriptor.
-        retrying: bool,
-    },
-}
-
 /// Receives commands and connection updates on the SDK's thread.
 pub trait Handler: Send + 'static {
     /// Answer through [`Command::reply`], now or later from any thread.
     fn command(&mut self, command: Command);
 
-    fn state(&mut self, _state: &State) {}
+    fn state(&mut self, _state: ConnectionState) {}
 
     /// Simlink found an emitted payload or reply invalid. `frame` is its error frame.
     fn rejected(&mut self, _frame: &Value) {}

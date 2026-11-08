@@ -7,12 +7,12 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use crate::EventInfo;
-use crate::connection::{Command, Handler, Reply, State};
+use crate::connection::{Command, Handler, Reply};
 use crate::discovery;
 use crate::protocol::{ERROR_CHANNEL, NAMESPACE};
 use crate::session::{JoinError, Received, Session};
 use crate::wire::{self, Inbound};
+use crate::{ConnectionState, EventInfo};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
@@ -49,14 +49,16 @@ impl<H: Handler> Worker<H> {
         let mut connection = 0;
 
         loop {
-            self.handler.state(&State::Searching);
+            self.handler.state(ConnectionState::Searching);
 
             let Some(joined) = self.join() else { return };
             match joined {
                 Ok((address, session)) => {
                     connection += 1;
                     log::info!("Connected to Simlink at {address}");
-                    self.handler.state(&State::Connected { address });
+                    self.handler.state(ConnectionState::Connected {
+                        address: address.to_string(),
+                    });
 
                     let joined_at = Instant::now();
                     match self.serve(session, connection) {
@@ -72,7 +74,7 @@ impl<H: Handler> Worker<H> {
                     log::warn!("Simlink refused the source: {code} {message}");
                     // An invalid descriptor fails the same way on every attempt.
                     let permanent = code == "HANDSHAKE_IDENTIFICATION_INVALID";
-                    self.handler.state(&State::Rejected {
+                    self.handler.state(ConnectionState::Rejected {
                         code,
                         message,
                         retrying: !permanent,

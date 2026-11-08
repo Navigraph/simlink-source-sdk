@@ -2,12 +2,25 @@
 #include <chrono>
 #include <cstdio>
 #include <thread>
+#include <variant>
 
 #include <simlink_source_sdk.hpp>
 
+const char* name(simlink_source_sdk::LogLevel level) {
+    using simlink_source_sdk::LogLevel;
+    switch (level) {
+        case LogLevel::kError: return "Error";
+        case LogLevel::kWarn: return "Warn";
+        case LogLevel::kInfo: return "Info";
+        case LogLevel::kDebug: return "Debug";
+        case LogLevel::kTrace: return "Trace";
+    }
+    return "?";
+}
+
 struct Log : simlink_source_sdk::LogListener {
     void log(const simlink_source_sdk::LogLevel& level, const std::string& message) override {
-        std::fprintf(stderr, "[%d] %s\n", static_cast<int>(level), message.c_str());
+        std::fprintf(stderr, "[%s] %s\n", name(level), message.c_str());
     }
 };
 
@@ -15,13 +28,15 @@ struct State : simlink_source_sdk::StateListener {
     void changed(simlink_source_sdk::ConnectionState state) override {
         using simlink_source_sdk::ConnectionState;
         const auto& variant = state.get_variant();
-        if (const auto* connected = std::get_if<ConnectionState::kConnected>(&variant)) {
+        if (std::holds_alternative<ConnectionState::kSearching>(variant)) {
+            std::printf("Searching for Simlink\n");
+        } else if (const auto* connected = std::get_if<ConnectionState::kConnected>(&variant)) {
             std::printf("Connected to %s\n", connected->address.c_str());
         } else if (const auto* rejected = std::get_if<ConnectionState::kRejected>(&variant)) {
             std::printf("Refused (%s): %s%s\n", rejected->code.c_str(), rejected->message.c_str(),
                         rejected->retrying ? ", retrying" : "");
         } else {
-            std::printf("Searching for Simlink\n");
+            std::printf("Unknown connection state\n");
         }
         std::fflush(stdout);
     }
