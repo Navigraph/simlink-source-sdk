@@ -39,20 +39,6 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<connection::Error> for Error {
-    fn from(error: connection::Error) -> Error {
-        let message = error.to_string();
-        match error {
-            connection::Error::Undeclared(_) => Error::Undeclared { message },
-            connection::Error::TooLarge(..) => Error::InvalidArgument { message },
-            // The SDK builds the descriptor and names channels itself, so these mean an SDK bug.
-            connection::Error::InvalidDescriptor(_) | connection::Error::UnknownChannel(_) => {
-                Error::InvalidArgument { message }
-            }
-        }
-    }
-}
-
 /// Where a source is in finding and joining Simlink.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum ConnectionState {
@@ -280,12 +266,12 @@ impl Source {
 
         let mut descriptor =
             serde_json::to_value(&self.options).expect("options serialize to JSON");
-        let events: Vec<&str> = self.events.iter().map(|event| event.channel()).collect();
+        let events: Vec<&str> = self.events.iter().map(|event| event.info().name).collect();
         let commands: Vec<&str> = setup.listeners.commands.keys().copied().collect();
         descriptor["capabilities"] = json!({ "events": events, "commands": commands });
 
         let Setup { listeners, address } = std::mem::take(setup);
-        *lifecycle = Lifecycle::Running(Connection::start(descriptor, address, listeners)?);
+        *lifecycle = Lifecycle::Running(Connection::start(descriptor, address, listeners));
 
         Ok(())
     }
@@ -299,12 +285,16 @@ impl Source {
         self.configure(|setup| setup.address = Some(address))
     }
 
-    pub(crate) fn emit_json(&self, channel: &str, payload: &impl Serialize) -> Result<(), Error> {
+    pub(crate) fn emit_json(&self, event: Event, payload: &impl Serialize) -> Result<(), Error> {
         let payload = serde_json::to_value(payload).map_err(|e| Error::InvalidArgument {
             message: e.to_string(),
         })?;
+        let info = event.info();
         match &*self.lifecycle.lock().expect("source lock") {
-            Lifecycle::Running(connection) => Ok(connection.emit(channel, payload)?),
+            Lifecycle::Running(_) if !self.events.contains(&event) => Err(Error::Undeclared {
+                message: format!("\"{}\" is not declared in the source descriptor", info.name),
+            }),
+            Lifecycle::Running(connection) => connection.emit(info, payload),
             Lifecycle::Configuring(_) => Err(Error::WrongState {
                 message: "start the source before emitting".into(),
             }),

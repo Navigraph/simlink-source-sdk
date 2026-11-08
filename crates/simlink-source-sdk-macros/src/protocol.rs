@@ -278,9 +278,8 @@ impl Protocol {
             .events
             .iter()
             .map(|event| deprecated(&event.channel.deprecated));
-        let event_names = self.events.iter().map(|event| &event.channel.name);
 
-        let emits = self.events.iter().map(|event| {
+        let emits = self.events.iter().zip(&variants).map(|(event, variant)| {
             let Channel { name, doc, deprecated } = &event.channel;
             let method = format_ident!("emit_{}", snake(name));
             let payload = &self.idents[event.payload];
@@ -294,7 +293,7 @@ impl Protocol {
                 #[doc = #doc]
                 #deprecated
                 pub fn #method(&self, payload: #payload) -> ::std::result::Result<(), crate::Error> {
-                    self.emit_json(#name, &payload)
+                    self.emit_json(Event::#variant, &payload)
                 }
             }
         });
@@ -372,16 +371,15 @@ impl Protocol {
                 #( #[doc = #event_docs] #event_deprecated #variants, )*
             }
 
-            // The SDK keeps serving deprecated channels.
-            #[allow(deprecated)]
             impl Event {
-                pub(crate) fn channel(self) -> &'static str {
-                    match self {
-                        #( Event::#variants => #event_names, )*
-                    }
+                pub(crate) fn info(self) -> &'static crate::EventInfo {
+                    // `EVENTS` lists the variants in order.
+                    &EVENTS[self as usize]
                 }
             }
 
+            // The SDK keeps serving deprecated channels.
+            #[allow(deprecated)]
             #[::uniffi::export]
             impl Source {
                 #(#emits)*
@@ -432,7 +430,6 @@ impl Protocol {
             };
             quote!(crate::EventInfo { name: #name, max_rate_hz: #rate })
         });
-        let commands = self.commands.iter().map(|command| &command.channel.name);
 
         Ok(quote! {
             /// Wire protocol major. Simlink serves `/v{PROTOCOL_VERSION}/source` and advertises it in mDNS TXT.
@@ -446,7 +443,6 @@ impl Protocol {
             /// Simlink drops the connection on a larger message.
             pub(crate) const MAX_PAYLOAD_BYTES: usize = #max_payload_bytes;
             pub(crate) const EVENTS: &[crate::EventInfo] = &[#(#events),*];
-            pub(crate) const COMMANDS: &[&str] = &[#(#commands),*];
         })
     }
 }
