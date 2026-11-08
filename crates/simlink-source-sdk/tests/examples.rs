@@ -1,6 +1,8 @@
 //! Every example program, built against the bindings by `cargo xtask examples`, joins a test Simlink, emits valid
 //! payloads on the events it declares, answers the commands it handles, and survives a rejection.
 
+mod support;
+
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -8,10 +10,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use support::manifest::{MANIFEST, issues, sample};
+use support::manifest::{MANIFEST, sample, valid};
 use support::server::Server;
-
-mod support;
 
 // C# programs start the .NET runtime first.
 const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
@@ -64,12 +64,10 @@ fn run(program: &Path, server: &Server) -> Result<(), String> {
     // Simlink refuses an invalid descriptor for good.
     valid("descriptor", &MANIFEST["descriptor"], &descriptor)?;
     let declared = |kind: &str| -> Vec<String> {
-        let names = descriptor["capabilities"][kind]
+        descriptor["capabilities"][kind]
             .as_array()
-            .cloned()
-            .unwrap_or_default();
-        names
-            .iter()
+            .into_iter()
+            .flatten()
             .filter_map(Value::as_str)
             .map(str::to_owned)
             .collect()
@@ -133,13 +131,6 @@ fn lines(child: &mut Child) -> Receiver<String> {
         }
     });
     receive
-}
-
-fn valid(what: &str, schema: &Value, value: &Value) -> Result<(), String> {
-    match issues(schema, value).as_slice() {
-        [] => Ok(()),
-        found => Err(format!("invalid {what}: {found:?}")),
-    }
 }
 
 /// Kills the program when the check ends, however it ends.

@@ -3,7 +3,7 @@
 ## Commands
 
 ```sh
-cargo test --workspace      # unit, schema round-trip and session tests
+cargo test --workspace      # unit, schema round-trip and source tests
 cargo xtask build           # libraries into target/release, C++ and C# bindings into target/bindings
 cargo xtask examples        # build every example and check each joins a test Simlink
 cargo xtask docs [--check]  # copy example code into the README's snippets
@@ -21,9 +21,9 @@ The tests trust what is generated and check what is hand-written:
   channel's payloads and the handshake descriptor from `protocol/source-schema.json`, round-trips them through the
   Rust types, and checks the JSON comes back the same and still valid. A channel added to the manifest fails the test
   until its types are listed.
-- **The connection behaves.** `crates/simlink-source-sdk/tests/session.rs` runs the SDK against a minimal Simlink in
-  `crates/simlink-source-sdk/tests/support`: handshakes and refusals, events and the rate limit, commands answered now
-  or later, rejections, heartbeats, and reconnects.
+- **The connection behaves.** `crates/simlink-source-sdk/tests/source.rs` runs the SDK against a minimal Simlink in
+  `crates/simlink-source-sdk/tests/support`: handshakes and refusals, events and the rate limit, commands answered
+  and refused, rejections, heartbeats, and reconnects.
 - **The bindings work.** `cargo xtask examples` builds every Rust, C++ and C# example against the generated bindings,
   then `crates/simlink-source-sdk/tests/examples.rs` runs each one against the same minimal Simlink, listening on
   Simlink's default port so the unmodified examples find it by discovery. Each must join, emit valid payloads on the

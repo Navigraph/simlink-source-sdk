@@ -8,28 +8,30 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use simlink_source_sdk::*;
-use support::manifest::{MANIFEST, issues};
+use support::manifest::{MANIFEST, valid};
 use support::server::Server;
 
 const WAIT: Duration = Duration::from_secs(5);
 
-fn source(server: &Server, events: Vec<Event>) -> Source {
+/// A source that finds Simlink by discovery.
+fn new_source(events: Vec<Event>) -> Source {
     let options = SourceOptions {
         id: "test-source".into(),
         display_name: "Test".into(),
     };
-    let source = Source::new(options, events);
+    Source::new(options, events)
+}
+
+/// A source that connects to `server`.
+fn source(server: &Server, events: Vec<Event>) -> Source {
+    let source = new_source(events);
     source.set_address(server.address()).unwrap();
     source
 }
 
 /// A refusal code, checked against the manifest so a rename there fails here.
 fn refusal(code: &str) -> &str {
-    let known: Vec<&Value> = MANIFEST["handshakeErrors"]["oneOf"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .collect();
+    let known = MANIFEST["handshakeErrors"]["oneOf"].as_array().unwrap();
     assert!(
         known
             .iter()
@@ -90,6 +92,13 @@ impl AtisGetHandler for Forward<(AtisGetInput, Arc<AtisGetReply>)> {
     }
 }
 
+/// The source's connection states, from before it starts.
+fn states(source: &Source) -> Receiver<ConnectionState> {
+    let (listener, states) = forward();
+    source.on_state(listener).unwrap();
+    states
+}
+
 /// The next state `wanted` accepts, skipping others.
 fn wait_for_state(
     states: &Receiver<ConnectionState>,
@@ -118,6 +127,19 @@ fn rejected(state: &ConnectionState) -> bool {
     matches!(state, ConnectionState::Rejected { .. })
 }
 
+/// Emits ownships at `latitude` until one reaches `server`, since emits are dropped until the source joins.
+fn emit_until_received(source: &Source, server: &Server, latitude: f64) -> Value {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        source.emit_telemetry_ownship(ownship(latitude)).unwrap();
+        if let Some(event) = server.wait_for_event("telemetry.ownship", Duration::from_millis(250))
+        {
+            return event;
+        }
+        assert!(Instant::now() < deadline, "no ownship arrived");
+    }
+}
+
 #[test]
 fn joins_and_emits_valid_events() {
     let server = Server::start();
@@ -125,23 +147,14 @@ fn joins_and_emits_valid_events() {
     source.start().unwrap();
 
     let join = server.wait_for_join(WAIT).expect("the source joins");
-    assert_eq!(issues(&MANIFEST["descriptor"], &join), Vec::<String>::new());
+    valid("descriptor", &MANIFEST["descriptor"], &join).unwrap();
     assert_eq!(join["id"], "test-source");
     assert_eq!(
         join["capabilities"],
         json!({ "events": ["telemetry.ownship"], "commands": [] })
     );
 
-    // Emits are dropped until the session is up, so keep emitting until one arrives.
-    let deadline = Instant::now() + WAIT;
-    let event = loop {
-        source.emit_telemetry_ownship(ownship(59.6)).unwrap();
-        if let Some(event) = server.wait_for_event("telemetry.ownship", Duration::from_millis(250))
-        {
-            break event;
-        }
-        assert!(Instant::now() < deadline, "no ownship arrived");
-    };
+    let event = emit_until_received(&source, &server, 59.6);
     assert_eq!(event["aircraft"]["position"]["latitude"], 59.6);
 }
 
@@ -167,7 +180,7 @@ fn rejects_misuse() {
 }
 
 #[test]
-fn answers_commands_now_and_later() {
+fn answers_and_refuses_commands_after_the_handler_returns() {
     let server = Server::start();
     let source = source(&server, vec![]);
     let (atis, requests) = forward();
@@ -203,10 +216,12 @@ fn answers_commands_now_and_later() {
         ]
     );
     for answer in answers.iter().flatten() {
-        assert_eq!(
-            issues(&MANIFEST["commands"]["atis.get"]["result"], answer),
-            Vec::<String>::new()
-        );
+        valid(
+            "answer",
+            &MANIFEST["commands"]["atis.get"]["result"],
+            answer,
+        )
+        .unwrap();
     }
     answering.join().unwrap();
 }
@@ -244,32 +259,29 @@ fn refuses_payloads_over_the_message_limit() {
 #[test]
 fn relays_simlink_rejections() {
     let server = Server::start();
-    let source = source(&server, vec![Event::TelemetryOwnship]);
+    let source = source(&server, vec![Event::TelemetryTraffic]);
     let (listener, rejections) = forward();
     source.on_rejected(listener).unwrap();
     source.start().unwrap();
     server.wait_for_join(WAIT).expect("the source joins");
 
     let frame = json!({
-        "event": "telemetry.ownship",
+        "event": "telemetry.traffic",
         "code": "INVALID_DATA",
-        "message": "bad transponder",
-        "issues": [{ "code": "too_big", "message": "Too long", "path": ["aircraft", "transponder"] }],
+        "message": "bad traffic",
+        "issues": [{ "code": "invalid_type", "message": "Required", "path": [3, "aircraft", "position"] }],
     });
-    assert_eq!(
-        issues(&MANIFEST["errorFrame"], &frame),
-        Vec::<String>::new()
-    );
+    valid("error frame", &MANIFEST["errorFrame"], &frame).unwrap();
     server.send_error(frame);
     assert_eq!(
         rejections.recv_timeout(WAIT),
         Ok(Rejection {
-            channel: "telemetry.ownship".into(),
+            channel: "telemetry.traffic".into(),
             code: "INVALID_DATA".into(),
-            message: "bad transponder".into(),
+            message: "bad traffic".into(),
             issues: vec![RejectionIssue {
-                path: "aircraft.transponder".into(),
-                message: "Too long".into(),
+                path: "[3].aircraft.position".into(),
+                message: "Required".into(),
             }],
         })
     );
@@ -283,10 +295,7 @@ fn sends_the_latest_payload_at_the_rate_limit() {
     server.wait_for_join(WAIT).expect("the source joins");
 
     // Warm up until one payload gets through, then emit far faster than the 10 Hz limit for one second.
-    while server.events("telemetry.ownship").is_empty() {
-        source.emit_telemetry_ownship(ownship(0.0)).unwrap();
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    emit_until_received(&source, &server, 0.0);
     let before = server.events("telemetry.ownship").len();
     let started = Instant::now();
     let mut emitted = 0;
@@ -315,8 +324,7 @@ fn sends_the_latest_payload_at_the_rate_limit() {
 fn rejoins_after_being_removed_from_the_namespace() {
     let server = Server::start();
     let source = source(&server, vec![]);
-    let (listener, states) = forward();
-    source.on_state(listener).unwrap();
+    let states = states(&source);
     source.start().unwrap();
 
     server.wait_for_join(WAIT).expect("the source joins");
@@ -337,8 +345,7 @@ fn rejoins_after_being_removed_from_the_namespace() {
 fn reconnects_after_simlink_closes_the_connection() {
     let server = Server::start();
     let source = source(&server, vec![]);
-    let (listener, states) = forward();
-    source.on_state(listener).unwrap();
+    let states = states(&source);
     source.start().unwrap();
 
     server.wait_for_join(WAIT).expect("the source joins");
@@ -353,8 +360,7 @@ fn answers_pings_and_notices_a_silent_simlink() {
     // A generous timeout, so a stalled CI runner can't drop the connection before the silence starts.
     let server = Server::with_heartbeat(Duration::from_millis(100), Duration::from_secs(1));
     let source = source(&server, vec![]);
-    let (listener, states) = forward();
-    source.on_state(listener).unwrap();
+    let states = states(&source);
     source.start().unwrap();
 
     wait_for_state(&states, connected);
@@ -387,13 +393,8 @@ fn leaves_when_dropped() {
 
 #[test]
 fn drops_promptly_while_searching() {
-    let options = SourceOptions {
-        id: "test-source".into(),
-        display_name: "Test".into(),
-    };
-    let source = Source::new(options, vec![]);
-    let (listener, states) = forward();
-    source.on_state(listener).unwrap();
+    let source = new_source(vec![]);
+    let states = states(&source);
     source.start().unwrap();
     wait_for_state(&states, searching);
     // Let discovery get under way.
@@ -412,18 +413,19 @@ fn drops_promptly_while_searching() {
 #[test]
 fn retries_a_refusal_that_can_clear() {
     let server = Server::start();
-    server.refuse_next_join(refusal("HANDSHAKE_SOURCE_ID_IN_USE"));
+    let code = refusal("HANDSHAKE_SOURCE_ID_IN_USE");
+    server.refuse_next_join(code);
     let source = source(&server, vec![]);
-    let (listener, states) = forward();
-    source.on_state(listener).unwrap();
+    let states = states(&source);
     source.start().unwrap();
 
-    let ConnectionState::Rejected { code, retrying, .. } = wait_for_state(&states, rejected) else {
-        unreachable!()
-    };
     assert_eq!(
-        (code.as_str(), retrying),
-        ("HANDSHAKE_SOURCE_ID_IN_USE", true)
+        wait_for_state(&states, rejected),
+        ConnectionState::Rejected {
+            code: code.into(),
+            message: format!("Refused: {code}"),
+            retrying: true,
+        }
     );
     server
         .wait_for_join(WAIT)
@@ -433,18 +435,19 @@ fn retries_a_refusal_that_can_clear() {
 #[test]
 fn stops_after_an_invalid_identification() {
     let server = Server::start();
-    server.refuse_next_join(refusal("HANDSHAKE_IDENTIFICATION_INVALID"));
+    let code = refusal("HANDSHAKE_IDENTIFICATION_INVALID");
+    server.refuse_next_join(code);
     let source = source(&server, vec![]);
-    let (listener, states) = forward();
-    source.on_state(listener).unwrap();
+    let states = states(&source);
     source.start().unwrap();
 
-    let ConnectionState::Rejected { code, retrying, .. } = wait_for_state(&states, rejected) else {
-        unreachable!()
-    };
     assert_eq!(
-        (code.as_str(), retrying),
-        ("HANDSHAKE_IDENTIFICATION_INVALID", false)
+        wait_for_state(&states, rejected),
+        ConnectionState::Rejected {
+            code: code.into(),
+            message: format!("Refused: {code}"),
+            retrying: false,
+        }
     );
     // A retry reports Searching after the 1 s minimum backoff.
     assert!(

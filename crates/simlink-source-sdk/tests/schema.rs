@@ -1,6 +1,8 @@
 //! The generated protocol types against the manifest they come from: every schema-valid sample must deserialize,
 //! and serialize back to the same, still valid, JSON.
 
+mod support;
+
 use std::collections::{BTreeSet, HashMap};
 
 use serde::Serialize;
@@ -8,8 +10,6 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use simlink_source_sdk::*;
 use support::manifest::{MANIFEST, branches, issues, sample};
-
-mod support;
 
 #[test]
 fn generated_types_round_trip_through_the_manifest() {

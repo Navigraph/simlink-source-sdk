@@ -17,6 +17,14 @@ pub fn issues(schema: &Value, value: &Value) -> Vec<String> {
         .collect()
 }
 
+/// Whether `value` satisfies `schema`, naming it `what` and listing the violations if not.
+pub fn valid(what: &str, schema: &Value, value: &Value) -> Result<(), String> {
+    match issues(schema, value).as_slice() {
+        [] => Ok(()),
+        found => Err(format!("invalid {what}: {found:?}")),
+    }
+}
+
 /// The most alternatives any `enum`, `oneOf`, `anyOf` or type list in `schema` offers, so samples for that many
 /// branches reach every one.
 pub fn branches(schema: &Value) -> usize {
