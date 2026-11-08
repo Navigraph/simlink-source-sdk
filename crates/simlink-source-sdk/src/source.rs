@@ -134,7 +134,8 @@ impl Listeners {
     }
 }
 
-/// `["aircraft", "position", "latitude"]` → `aircraft.position.latitude`, `[3, "key"]` → `[3].key`.
+/// Formats an issue's path segments for display: names joined by dots, array indices in brackets, such as
+/// `[3].aircraft.position` from `[3, "aircraft", "position"]`.
 fn issue_path(segments: &Value) -> String {
     let mut path = String::new();
     for segment in segments.as_array().into_iter().flatten() {
