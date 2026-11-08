@@ -1,0 +1,4 @@
+[bindings.csharp]
+namespace = "Navigraph.Simlink.SourceSdk"
+global_methods_class_name = "SimlinkSourceSdk"
+access_modifier = "public"

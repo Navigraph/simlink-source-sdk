@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, HashMap};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use simlink::*;
+use simlink_source_sdk::*;
 use support::manifest::{MANIFEST, branches, issues, sample};
 
 mod support;

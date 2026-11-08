@@ -1,5 +1,5 @@
-//! `simlink-cpp-<version>-<rid>.zip`: the headers and one static library with the C++ half of the bindings compiled
-//! in, `bindings/cpp/prebuilt` as its CMake project, and the examples.
+//! `simlink-source-sdk-cpp-<version>-<rid>.zip`: the headers and one static library with the C++ half of the bindings
+//! compiled in, `bindings/cpp/prebuilt` as its CMake project, and the examples.
 
 use std::io::Write;
 use std::path::Path;
@@ -22,14 +22,17 @@ const CONFIGS: &[&str] = if cfg!(windows) {
 /// Builds this platform's C++ archive and tests its examples.
 pub fn package() -> Result<()> {
     let library = Library::build()?;
-    let archive = Archive::new(format!("simlink-cpp-{VERSION}-{}", library.rid))?;
+    let archive = Archive::new(format!("simlink-source-sdk-cpp-{VERSION}-{}", library.rid))?;
 
     archive.add("bindings/cpp/prebuilt/CMakeLists.txt", "")?;
     if cfg!(windows) {
-        archive.add("bindings/cpp/prebuilt/simlink.props", "")?;
+        archive.add("bindings/cpp/prebuilt/simlink-source-sdk.props", "")?;
     }
     archive.add("bindings/cpp/cmake/system-libraries.cmake", "cmake")?;
-    for header in ["simlink.hpp", "simlink_scaffolding.hpp"] {
+    for header in [
+        "simlink_source_sdk.hpp",
+        "simlink_source_sdk_scaffolding.hpp",
+    ] {
         archive.add(Path::new("target/bindings/cpp").join(header), "include")?;
     }
     add_libraries(&archive, &library)?;

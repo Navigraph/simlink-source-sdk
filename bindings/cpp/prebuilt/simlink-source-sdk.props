@@ -3,8 +3,8 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!-- By UseDebugLibraries rather than name, so custom configurations pick the right one. -->
   <PropertyGroup>
-    <SimlinkLibraries Condition="'$(UseDebugLibraries)' == 'true'">$(MSBuildThisFileDirectory)lib\Debug</SimlinkLibraries>
-    <SimlinkLibraries Condition="'$(UseDebugLibraries)' != 'true'">$(MSBuildThisFileDirectory)lib\Release</SimlinkLibraries>
+    <SimlinkSourceSdkLibraries Condition="'$(UseDebugLibraries)' == 'true'">$(MSBuildThisFileDirectory)lib\Debug</SimlinkSourceSdkLibraries>
+    <SimlinkSourceSdkLibraries Condition="'$(UseDebugLibraries)' != 'true'">$(MSBuildThisFileDirectory)lib\Release</SimlinkSourceSdkLibraries>
   </PropertyGroup>
 
   <ItemDefinitionGroup>
@@ -14,7 +14,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(SimlinkLibraries)\simlink.lib;ntdll.lib;userenv.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SimlinkSourceSdkLibraries)\simlink_source_sdk.lib;ntdll.lib;userenv.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
 </Project>

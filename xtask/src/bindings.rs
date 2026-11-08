@@ -8,9 +8,10 @@ use anyhow::Result;
 use crate::generators::{GENERATORS, Generator};
 use crate::{cargo, executable, run};
 
-/// Builds `simlink.lib`/`libsimlink.a` for C++, the dynamic library for C#, and both bindings from it.
+/// Builds `simlink_source_sdk.lib`/`libsimlink_source_sdk.a` for C++, the dynamic library for C#, and both bindings
+/// from it.
 pub fn build() -> Result<()> {
-    run(cargo("build").args(["--release", "-p", "simlink"]))?;
+    run(cargo("build").args(["--release", "-p", "simlink-source-sdk"]))?;
     let library = Path::new("target/release").join(dynamic_library());
 
     for generator in &GENERATORS {
@@ -57,7 +58,7 @@ fn install(generator: &Generator) -> Result<PathBuf> {
 
 pub fn dynamic_library() -> String {
     format!(
-        "{}simlink{}",
+        "{}simlink_source_sdk{}",
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     )

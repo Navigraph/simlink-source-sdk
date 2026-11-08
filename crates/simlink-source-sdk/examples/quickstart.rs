@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use simlink::*;
+use simlink_source_sdk::*;
 
 fn main() -> Result<(), Error> {
     let options = SourceOptions {

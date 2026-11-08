@@ -20,7 +20,7 @@ jobs:
       - name: Check the tag matches the version
         shell: bash
         run: |
-          version=$(cargo pkgid -p simlink | sed 's/.*[#@]//')
+          version=$(cargo pkgid -p simlink-source-sdk | sed 's/.*[#@]//')
           if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match version $version in Cargo.toml"
             exit 1

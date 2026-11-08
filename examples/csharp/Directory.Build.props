@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="$(MSBuildThisFileDirectory)../../bindings/csharp/Navigraph.Simlink.csproj" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../bindings/csharp/Navigraph.Simlink.SourceSdk.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,6 @@
 // Answers Simlink's ATIS command, refusing airports without one. Stop with Ctrl+C.
 
-using Navigraph.Simlink;
+using Navigraph.Simlink.SourceSdk;
 
 var options = new SourceOptions(
     Id: "commands",

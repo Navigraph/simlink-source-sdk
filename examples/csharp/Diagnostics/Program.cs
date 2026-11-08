@@ -1,8 +1,8 @@
 // Prints the SDK's logs, connection changes and anything Simlink rejects. Stop with Ctrl+C.
 
-using Navigraph.Simlink;
+using Navigraph.Simlink.SourceSdk;
 
-Simlink.SetLogger(new ConsoleLog(), LogLevel.Debug);
+SimlinkSourceSdk.SetLogger(new ConsoleLog(), LogLevel.Debug);
 
 var options = new SourceOptions(
     Id: "diagnostics",

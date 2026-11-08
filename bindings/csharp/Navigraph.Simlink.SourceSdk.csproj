@@ -13,21 +13,21 @@
   </PropertyGroup>
 
   <!-- `runtimes/<rid>/native/<library>` for each platform, from `cargo xtask package csharp-runtime`. -->
-  <ItemGroup Condition="'$(SimlinkRuntimes)' != ''">
-    <None Include="$(SimlinkRuntimes)/**/*" Pack="true" PackagePath="runtimes" Visible="false" />
+  <ItemGroup Condition="'$(SimlinkSourceSdkRuntimes)' != ''">
+    <None Include="$(SimlinkSourceSdkRuntimes)/**/*" Pack="true" PackagePath="runtimes" Visible="false" />
   </ItemGroup>
 
   <!-- The bindings and library from `cargo xtask build`. -->
   <ItemGroup>
     <Compile Include="../../target/bindings/csharp/*.cs" />
-    <None Include="../../target/release/simlink.dll" Condition="Exists('../../target/release/simlink.dll')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
-    <None Include="../../target/release/libsimlink.so" Condition="Exists('../../target/release/libsimlink.so')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
-    <None Include="../../target/release/libsimlink.dylib" Condition="Exists('../../target/release/libsimlink.dylib')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="../../target/release/simlink_source_sdk.dll" Condition="Exists('../../target/release/simlink_source_sdk.dll')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="../../target/release/libsimlink_source_sdk.so" Condition="Exists('../../target/release/libsimlink_source_sdk.so')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="../../target/release/libsimlink_source_sdk.dylib" Condition="Exists('../../target/release/libsimlink_source_sdk.dylib')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
   <!-- Fail here rather than build an empty assembly. -->
   <Target Name="RequireBindings" BeforeTargets="CoreCompile">
-    <Error Condition="!Exists('../../target/bindings/csharp/simlink.cs')" Text="No C# bindings in target/bindings/csharp; run `cargo xtask build` first." />
+    <Error Condition="!Exists('../../target/bindings/csharp/simlink_source_sdk.cs')" Text="No C# bindings in target/bindings/csharp; run `cargo xtask build` first." />
   </Target>
 
 </Project>

@@ -19,7 +19,7 @@ impl Library {
     pub fn build() -> Result<Library> {
         bindings::build()?;
         let static_name = format!(
-            "{}simlink{}",
+            "{}simlink_source_sdk{}",
             std::env::consts::DLL_PREFIX,
             if cfg!(windows) { ".lib" } else { ".a" }
         );
@@ -48,7 +48,7 @@ fn universal(library: &str) -> Result<PathBuf> {
     let mut slices = Vec::new();
     for target in ["aarch64-apple-darwin", "x86_64-apple-darwin"] {
         run(Command::new("rustup").args(["target", "add", target]))?;
-        run(cargo("build").args(["--release", "-p", "simlink", "--target", target]))?;
+        run(cargo("build").args(["--release", "-p", "simlink-source-sdk", "--target", target]))?;
         slices.push(
             Path::new("target")
                 .join(target)

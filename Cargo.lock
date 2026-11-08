@@ -1157,7 +1157,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "simlink"
+name = "simlink-source-sdk"
 version = "1.0.0-rc1"
 dependencies = [
  "jsonschema",
@@ -1165,14 +1165,14 @@ dependencies = [
  "mdns-sd",
  "serde",
  "serde_json",
- "simlink",
- "simlink-macros",
+ "simlink-source-sdk",
+ "simlink-source-sdk-macros",
  "tungstenite",
  "uniffi",
 ]
 
 [[package]]
-name = "simlink-macros"
+name = "simlink-source-sdk-macros"
 version = "1.0.0-rc1"
 dependencies = [
  "proc-macro2",

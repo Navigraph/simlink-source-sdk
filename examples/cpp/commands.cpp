@@ -4,24 +4,24 @@
 #include <optional>
 #include <thread>
 
-#include <simlink.hpp>
+#include <simlink_source_sdk.hpp>
 
 // The airport's current ATIS broadcasts, if it has any.
-std::optional<std::vector<simlink::AtisReport>> atis(const std::string& icao) {
+std::optional<std::vector<simlink_source_sdk::AtisReport>> atis(const std::string& icao) {
     if (icao != "ESSA") return std::nullopt;
 
-    simlink::AtisReport arrival{};
+    simlink_source_sdk::AtisReport arrival{};
     arrival.icao = icao;
-    arrival.type = simlink::AtisReportType::kArr;
+    arrival.type = simlink_source_sdk::AtisReportType::kArr;
     arrival.letter = "A";
     arrival.phonetic = "Alpha";
     arrival.message = "Stockholm Arlanda arrival information Alpha";
     arrival.date_issued = "2026-10-19T12:00:00Z";
     arrival.arriving_runways = {"19R"};
 
-    simlink::AtisReport departure{};
+    simlink_source_sdk::AtisReport departure{};
     departure.icao = icao;
-    departure.type = simlink::AtisReportType::kDep;
+    departure.type = simlink_source_sdk::AtisReportType::kDep;
     departure.letter = "B";
     departure.phonetic = "Bravo";
     departure.message = "Stockholm Arlanda departure information Bravo";
@@ -31,29 +31,29 @@ std::optional<std::vector<simlink::AtisReport>> atis(const std::string& icao) {
     return std::vector{arrival, departure};
 }
 
-struct Atis : simlink::AtisGetHandler {
-    void handle(const simlink::AtisGetInput& input,
-                const std::shared_ptr<simlink::AtisGetReply>& reply) override {
-        // Answering twice throws simlink::SimlinkError.
+struct Atis : simlink_source_sdk::AtisGetHandler {
+    void handle(const simlink_source_sdk::AtisGetInput& input,
+                const std::shared_ptr<simlink_source_sdk::AtisGetReply>& reply) override {
+        // Answering twice throws simlink_source_sdk::SimlinkError.
         try {
             if (auto reports = atis(input.icao)) {
                 reply->ok(*reports);
             } else {
-                reply->refuse(simlink::AtisGetError::kAtisNotAvailable);
+                reply->refuse(simlink_source_sdk::AtisGetError::kAtisNotAvailable);
             }
-        } catch (const simlink::SimlinkError& error) {
+        } catch (const simlink_source_sdk::SimlinkError& error) {
             std::fprintf(stderr, "Could not answer atis.get: %s\n", error.what());
         }
     }
 };
 
 int main() {
-    simlink::SourceOptions options{};
+    simlink_source_sdk::SourceOptions options{};
     options.id = "commands";
     options.display_name = "Commands";
 
     // Commands are declared by registering their handlers, so this source declares no events.
-    auto source = simlink::Source::init(options, {});
+    auto source = simlink_source_sdk::Source::init(options, {});
     source->on_atis_get(std::make_shared<Atis>());
     source->start();
 

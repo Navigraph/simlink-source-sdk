@@ -1,5 +1,5 @@
 [package]
-name = "simlink"
+name = "simlink-source-sdk"
 description = "Connects a flight simulator data source to Navigraph Simlink"
 version.workspace = true
 edition.workspace = true
@@ -11,7 +11,7 @@ rust-version.workspace = true
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
-simlink-macros.workspace = true
+simlink-source-sdk-macros.workspace = true
 log.workspace = true
 mdns-sd.workspace = true
 serde.workspace = true
@@ -25,4 +25,4 @@ testing = []
 
 [dev-dependencies]
 jsonschema.workspace = true
-simlink = { path = ".", features = ["testing"] }
+simlink-source-sdk = { path = ".", features = ["testing"] }

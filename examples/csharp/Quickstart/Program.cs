@@ -1,6 +1,6 @@
 // Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
 
-using Navigraph.Simlink;
+using Navigraph.Simlink.SourceSdk;
 
 var options = new SourceOptions(
     Id: "quickstart",

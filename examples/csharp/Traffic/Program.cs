@@ -1,6 +1,6 @@
 // Emits the traffic around the aircraft once a second and answers flight plan queries for it. Stop with Ctrl+C.
 
-using Navigraph.Simlink;
+using Navigraph.Simlink.SourceSdk;
 
 var options = new SourceOptions(
     Id: "traffic",

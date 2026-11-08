@@ -10,7 +10,7 @@ repository = "https://github.com/Navigraph/simlink-source-sdk"
 rust-version = "1.99"
 
 [workspace.dependencies]
-simlink-macros = { path = "crates/simlink-macros" }
+simlink-source-sdk-macros = { path = "crates/simlink-source-sdk-macros" }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }

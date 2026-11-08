@@ -3,17 +3,17 @@
 #include <cstdio>
 #include <thread>
 
-#include <simlink.hpp>
+#include <simlink_source_sdk.hpp>
 
-struct Log : simlink::LogListener {
-    void log(const simlink::LogLevel& level, const std::string& message) override {
+struct Log : simlink_source_sdk::LogListener {
+    void log(const simlink_source_sdk::LogLevel& level, const std::string& message) override {
         std::fprintf(stderr, "[%d] %s\n", static_cast<int>(level), message.c_str());
     }
 };
 
-struct State : simlink::StateListener {
-    void changed(simlink::ConnectionState state) override {
-        using simlink::ConnectionState;
+struct State : simlink_source_sdk::StateListener {
+    void changed(simlink_source_sdk::ConnectionState state) override {
+        using simlink_source_sdk::ConnectionState;
         const auto& variant = state.get_variant();
         if (const auto* connected = std::get_if<ConnectionState::kConnected>(&variant)) {
             std::printf("Connected to %s\n", connected->address.c_str());
@@ -27,8 +27,8 @@ struct State : simlink::StateListener {
     }
 };
 
-struct Rejections : simlink::RejectionListener {
-    void rejected(const simlink::Rejection& rejection) override {
+struct Rejections : simlink_source_sdk::RejectionListener {
+    void rejected(const simlink_source_sdk::Rejection& rejection) override {
         std::printf("Simlink rejected %s (%s): %s\n", rejection.channel.c_str(),
                     rejection.code.c_str(), rejection.message.c_str());
         for (const auto& issue : rejection.issues) {
@@ -39,13 +39,13 @@ struct Rejections : simlink::RejectionListener {
 };
 
 int main() {
-    simlink::set_logger(std::make_shared<Log>(), simlink::LogLevel::kDebug);
+    simlink_source_sdk::set_logger(std::make_shared<Log>(), simlink_source_sdk::LogLevel::kDebug);
 
-    simlink::SourceOptions options{};
+    simlink_source_sdk::SourceOptions options{};
     options.id = "diagnostics";
     options.display_name = "Diagnostics";
 
-    auto source = simlink::Source::init(options, {simlink::Event::kTelemetryTraffic});
+    auto source = simlink_source_sdk::Source::init(options, {simlink_source_sdk::Event::kTelemetryTraffic});
     source->on_state(std::make_shared<State>());
     source->on_rejected(std::make_shared<Rejections>());
     source->start();
@@ -55,7 +55,7 @@ int main() {
         // Emitting fails for an undeclared event, before `start`, or over Simlink's message size limit.
         try {
             source->emit_telemetry_traffic({});
-        } catch (const simlink::SimlinkError& error) {
+        } catch (const simlink_source_sdk::SimlinkError& error) {
             std::printf("Could not emit: %s\n", error.what());
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));

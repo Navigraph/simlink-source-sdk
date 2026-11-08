@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use simlink::*;
+use simlink_source_sdk::*;
 use support::manifest::{MANIFEST, issues};
 use support::server::Server;
 

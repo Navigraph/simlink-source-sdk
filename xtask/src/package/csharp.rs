@@ -1,5 +1,5 @@
-//! `simlink-csharp-<version>.zip`: the `Navigraph.Simlink` NuGet package, with every platform's library under
-//! `runtimes/<rid>/native`, and the examples restoring it from the archive's folder.
+//! `simlink-source-sdk-csharp-<version>.zip`: the `Navigraph.Simlink.SourceSdk` NuGet package, with every platform's
+//! library under `runtimes/<rid>/native`, and the examples restoring it from the archive's folder.
 //!
 //! One package serves every platform, so each builds its library with `runtime` and one machine packs them all.
 
@@ -17,7 +17,7 @@ use crate::{executable, run};
 const NUGET_CONFIG: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <configuration>
   <packageSources>
-    <add key="simlink" value="." />
+    <add key="simlink-source-sdk" value="." />
   </packageSources>
 </configuration>
 "#;
@@ -54,11 +54,11 @@ pub fn package(runtimes: Option<&Path>) -> Result<()> {
         }
     };
 
-    let archive = Archive::new(format!("simlink-csharp-{VERSION}"))?;
+    let archive = Archive::new(format!("simlink-source-sdk-csharp-{VERSION}"))?;
     run(Command::new("dotnet")
         .args([
             "pack",
-            "bindings/csharp/Navigraph.Simlink.csproj",
+            "bindings/csharp/Navigraph.Simlink.SourceSdk.csproj",
             "-c",
             "Release",
             "-o",
@@ -66,7 +66,7 @@ pub fn package(runtimes: Option<&Path>) -> Result<()> {
         .arg(archive.path(""))
         .arg(format!("-p:Version={VERSION}"))
         .arg(format!(
-            "-p:SimlinkRuntimes={}",
+            "-p:SimlinkSourceSdkRuntimes={}",
             std::path::absolute(runtimes)?.display()
         )))?;
     std::fs::write(archive.path("nuget.config"), NUGET_CONFIG)?;
@@ -76,11 +76,11 @@ pub fn package(runtimes: Option<&Path>) -> Result<()> {
         &[
             (
                 "the bindings from `cargo xtask build`",
-                "the Navigraph.Simlink package",
+                "the Navigraph.Simlink.SourceSdk package",
             ),
             (
-                r#"<ProjectReference Include="$(MSBuildThisFileDirectory)../../bindings/csharp/Navigraph.Simlink.csproj" />"#,
-                &format!(r#"<PackageReference Include="Navigraph.Simlink" Version="{VERSION}" />"#),
+                r#"<ProjectReference Include="$(MSBuildThisFileDirectory)../../bindings/csharp/Navigraph.Simlink.SourceSdk.csproj" />"#,
+                &format!(r#"<PackageReference Include="Navigraph.Simlink.SourceSdk" Version="{VERSION}" />"#),
             ),
         ],
     )?;

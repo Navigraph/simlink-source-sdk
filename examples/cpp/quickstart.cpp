@@ -2,11 +2,11 @@
 #include <chrono>
 #include <thread>
 
-#include <simlink.hpp>
+#include <simlink_source_sdk.hpp>
 
 // In a real source these values come from the simulator.
-simlink::TelemetryOwnship ownship(double latitude, double longitude) {
-    simlink::TelemetryOwnship ownship{};
+simlink_source_sdk::TelemetryOwnship ownship(double latitude, double longitude) {
+    simlink_source_sdk::TelemetryOwnship ownship{};
     auto& aircraft = ownship.aircraft;
     aircraft.position = {latitude, longitude};
     aircraft.altitude.true_ = 1200;
@@ -22,11 +22,11 @@ simlink::TelemetryOwnship ownship(double latitude, double longitude) {
 }
 
 int main() {
-    simlink::SourceOptions options{};
+    simlink_source_sdk::SourceOptions options{};
     options.id = "quickstart";
     options.display_name = "Quickstart";
 
-    auto source = simlink::Source::init(options, {simlink::Event::kTelemetryOwnship});
+    auto source = simlink_source_sdk::Source::init(options, {simlink_source_sdk::Event::kTelemetryOwnship});
     source->start();
 
     double latitude = 59.6519;

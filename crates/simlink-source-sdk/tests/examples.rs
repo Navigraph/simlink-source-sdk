@@ -21,8 +21,8 @@ const SURVIVAL: Duration = Duration::from_millis(500);
 #[test]
 #[ignore = "needs the programs `cargo xtask examples` builds"]
 fn examples_join_and_answer() {
-    let programs =
-        std::env::var_os("SIMLINK_EXAMPLES").expect("SIMLINK_EXAMPLES lists the example programs");
+    let programs = std::env::var_os("SIMLINK_SOURCE_SDK_EXAMPLES")
+        .expect("SIMLINK_SOURCE_SDK_EXAMPLES lists the example programs");
     let failures: Vec<String> = std::env::split_paths(&programs)
         .filter_map(|program| {
             check(&program)

@@ -1,5 +1,5 @@
 [package]
-name = "simlink-macros"
+name = "simlink-source-sdk-macros"
 description = "protocol! macro that turns Simlink's source manifest into the SDK's protocol API"
 version.workspace = true
 edition.workspace = true

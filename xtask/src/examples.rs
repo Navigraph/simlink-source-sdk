@@ -14,7 +14,7 @@ pub fn check() -> Result<()> {
     test(&build()?)
 }
 
-/// `crates/simlink/tests/examples.rs` checks that each example program joins a test Simlink and answers it.
+/// `crates/simlink-source-sdk/tests/examples.rs` checks that each example program joins a test Simlink and answers it.
 pub fn test(programs: &[PathBuf]) -> Result<()> {
     let programs = programs
         .iter()
@@ -22,14 +22,24 @@ pub fn test(programs: &[PathBuf]) -> Result<()> {
         .collect::<std::io::Result<Vec<_>>>()?;
 
     run(cargo("test")
-        .args(["-p", "simlink", "--test", "examples", "--", "--ignored"])
-        .env("SIMLINK_EXAMPLES", std::env::join_paths(&programs)?))
+        .args([
+            "-p",
+            "simlink-source-sdk",
+            "--test",
+            "examples",
+            "--",
+            "--ignored",
+        ])
+        .env(
+            "SIMLINK_SOURCE_SDK_EXAMPLES",
+            std::env::join_paths(&programs)?,
+        ))
 }
 
 /// Builds every example in release. Returns the programs.
 fn build() -> Result<Vec<PathBuf>> {
     bindings::build()?;
-    run(cargo("build").args(["--release", "-p", "simlink", "--examples"]))?;
+    run(cargo("build").args(["--release", "-p", "simlink-source-sdk", "--examples"]))?;
     let cpp = cmake(Path::new("examples/cpp"), Path::new("target/examples/cpp"))?;
 
     let mut programs = Vec::new();

@@ -28,43 +28,44 @@ Each archive also holds the [examples](#examples), ready to build against it.
 
 ### C++
 
-`simlink-cpp-<version>-<platform>.zip` holds the headers in `include`, a static library in `lib` (on Windows,
-`lib/Debug` and `lib/Release`), a `CMakeLists.txt`, and on Windows a Visual Studio property sheet. You need a C++20 compiler; on Windows, MSVC with the dynamic
-runtime library (`/MD` and `/MDd`, Visual Studio's default). The library is static, so nothing ships alongside your
-program.
+`simlink-source-sdk-cpp-<version>-<platform>.zip` holds the headers in `include`, a static library in `lib` (on
+Windows, `lib/Debug` and `lib/Release`), a `CMakeLists.txt`, and on Windows a Visual Studio property sheet. You need a
+C++20 compiler; on Windows, MSVC with the dynamic runtime library (`/MD` and `/MDd`, Visual Studio's default). The
+library is static, so nothing ships alongside your program.
 
 **CMake**
 
 ```cmake
-add_subdirectory(path/to/simlink-cpp-<version>-<platform> simlink)
-target_link_libraries(my_app PRIVATE simlink::simlink)
+add_subdirectory(path/to/simlink-source-sdk-cpp-<version>-<platform> simlink-source-sdk)
+target_link_libraries(my_app PRIVATE simlink-source-sdk::simlink-source-sdk)
 ```
 
 **Visual Studio project**
 
-In the Property Manager, right-click your project, choose Add Existing Property Sheet, and pick `simlink.props` from
-the SDK. It adds the headers and C++20, and links the Debug or Release library to match each configuration.
+In the Property Manager, right-click your project, choose Add Existing Property Sheet, and pick
+`simlink-source-sdk.props` from the SDK. It adds the headers and C++20, and links the Debug or Release library to
+match each configuration.
 
-**Other build systems**: add `include` to the include path, and link `lib/libsimlink.a` and the system libraries
-listed in `cmake/system-libraries.cmake`.
+**Other build systems**: add `include` to the include path, and link `lib/libsimlink_source_sdk.a` and the system
+libraries listed in `cmake/system-libraries.cmake`.
 
 ### C#
 
-`simlink-csharp-<version>.zip` holds the `Navigraph.Simlink` NuGet package. It targets .NET Standard 2.0, for .NET 6+
-and .NET Framework 4.7.2+.
+`simlink-source-sdk-csharp-<version>.zip` holds the `Navigraph.Simlink.SourceSdk` NuGet package. It targets .NET
+Standard 2.0, for .NET 6+ and .NET Framework 4.7.2+.
 
-1. Copy `Navigraph.Simlink.<version>.nupkg` into a folder in your repository, such as `packages`.
+1. Copy `Navigraph.Simlink.SourceSdk.<version>.nupkg` into a folder in your repository, such as `packages`.
 2. Add that folder as a package source in a `nuget.config` next to your solution:
 
    ```xml
    <configuration>
      <packageSources>
-       <add key="simlink" value="packages" />
+       <add key="simlink-source-sdk" value="packages" />
      </packageSources>
    </configuration>
    ```
 
-3. `dotnet add package Navigraph.Simlink --version <version>`
+3. `dotnet add package Navigraph.Simlink.SourceSdk --version <version>`
 
 The package carries the native library for every platform, and builds copy the right one. On .NET Framework, set
 `<PlatformTarget>x64</PlatformTarget>`: NuGet only copies the library for an x64 build. A single-file publish needs
@@ -75,7 +76,7 @@ The package carries the native library for every platform, and builds copy the r
 The crate isn't on crates.io yet:
 
 ```toml
-simlink = { git = "https://github.com/Navigraph/simlink-source-sdk", tag = "v<version>" }
+simlink-source-sdk = { git = "https://github.com/Navigraph/simlink-source-sdk", tag = "v<version>" }
 ```
 
 ## Using it
@@ -90,11 +91,11 @@ Each quickstart emits the aircraft's position ten times a second.
 #include <chrono>
 #include <thread>
 
-#include <simlink.hpp>
+#include <simlink_source_sdk.hpp>
 
 // In a real source these values come from the simulator.
-simlink::TelemetryOwnship ownship(double latitude, double longitude) {
-    simlink::TelemetryOwnship ownship{};
+simlink_source_sdk::TelemetryOwnship ownship(double latitude, double longitude) {
+    simlink_source_sdk::TelemetryOwnship ownship{};
     auto& aircraft = ownship.aircraft;
     aircraft.position = {latitude, longitude};
     aircraft.altitude.true_ = 1200;
@@ -110,11 +111,11 @@ simlink::TelemetryOwnship ownship(double latitude, double longitude) {
 }
 
 int main() {
-    simlink::SourceOptions options{};
+    simlink_source_sdk::SourceOptions options{};
     options.id = "quickstart";
     options.display_name = "Quickstart";
 
-    auto source = simlink::Source::init(options, {simlink::Event::kTelemetryOwnship});
+    auto source = simlink_source_sdk::Source::init(options, {simlink_source_sdk::Event::kTelemetryOwnship});
     source->start();
 
     double latitude = 59.6519;
@@ -132,7 +133,7 @@ int main() {
 ```csharp
 // Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
 
-using Navigraph.Simlink;
+using Navigraph.Simlink.SourceSdk;
 
 var options = new SourceOptions(
     Id: "quickstart",
@@ -170,13 +171,13 @@ static TelemetryOwnship Ownship(double latitude, double longitude)
 
 **Rust**
 
-<!-- snippet: crates/simlink/examples/quickstart.rs -->
+<!-- snippet: crates/simlink-source-sdk/examples/quickstart.rs -->
 ```rust
 //! Emits the aircraft's position to Simlink ten times a second. Stop with Ctrl+C.
 
 use std::time::Duration;
 
-use simlink::*;
+use simlink_source_sdk::*;
 
 fn main() -> Result<(), Error> {
     let options = SourceOptions {
@@ -272,9 +273,9 @@ answer from any thread once the result is ready.
 
 | Language | Type | Cases |
 | --- | --- | --- |
-| C++ | `simlink::SimlinkError` (thrown) | `InvalidArgument`, `Undeclared`, `WrongState`, `AlreadyAnswered`, as subclasses in `simlink::simlink_error` |
+| C++ | `simlink_source_sdk::SimlinkError` (thrown) | `InvalidArgument`, `Undeclared`, `WrongState`, `AlreadyAnswered`, as subclasses in `simlink_source_sdk::simlink_error` |
 | C# | `SimlinkException` (thrown) | The same, as nested classes such as `SimlinkException.WrongState` |
-| Rust | `simlink::Error` (returned) | The same, as variants |
+| Rust | `simlink_source_sdk::Error` (returned) | The same, as variants |
 
 ### Names in each language
 
@@ -317,12 +318,13 @@ cargo xtask build
 
 This builds the library into `target/release` and generates the C++ and C# bindings into `target/bindings`. The first
 run also installs the binding generators, which takes a few minutes. Link `bindings/cpp` with CMake as above, or
-reference `bindings/csharp/Navigraph.Simlink.csproj`.
+reference `bindings/csharp/Navigraph.Simlink.SourceSdk.csproj`.
 
-The examples live in `examples/cpp`, `examples/csharp` and `crates/simlink/examples`. From the repository root:
+The examples live in `examples/cpp`, `examples/csharp` and `crates/simlink-source-sdk/examples`. From the repository
+root:
 
 ```sh
-cargo run --release -p simlink --example quickstart
+cargo run --release -p simlink-source-sdk --example quickstart
 
 cmake -S examples/cpp -B target/examples/cpp -DCMAKE_BUILD_TYPE=Release
 cmake --build target/examples/cpp --config Release
