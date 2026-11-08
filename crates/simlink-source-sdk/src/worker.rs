@@ -1,26 +1,34 @@
-//! The background thread that owns the connection.
+//! The SDK's thread: finds Simlink, joins with the source's descriptor, sends each event's latest payload at its
+//! rate limit, hands commands and rejections to the listeners, and reconnects with backoff.
 
 use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, TryRecvError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
-use crate::connection::{Command, Handler, Reply};
 use crate::discovery;
-use crate::protocol::{ERROR_CHANNEL, NAMESPACE};
-use crate::session::{JoinError, Received, Session};
-use crate::wire::{self, Inbound};
-use crate::{ConnectionState, EventInfo};
+use crate::protocol::{ERROR_CHANNEL, MAX_PAYLOAD_BYTES, NAMESPACE, SOCKET_IO_PATH};
+use crate::socket_io::{ConnectError, Frame, Received, Socket};
+use crate::source::Listeners;
+use crate::{ConnectionState, Error};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(10);
 
-pub enum Op {
-    /// The event and its encoded frame.
-    Emit(&'static EventInfo, String),
+/// An event channel a source can emit.
+#[derive(Debug)]
+pub struct EventInfo {
+    pub name: &'static str,
+    /// Simlink coalesces emissions above this rate, keeping the latest.
+    pub max_rate_hz: Option<f64>,
+}
+
+enum Op {
+    Emit(&'static EventInfo, Frame),
     Reply {
         connection: u64,
         ack: u64,
@@ -29,40 +37,133 @@ pub enum Op {
     Stop,
 }
 
+/// Answers one command. Dropping it unanswered lets the command time out.
+pub struct Reply {
+    ops: Sender<Op>,
+    connection: u64,
+    ack: u64,
+}
+
+impl Reply {
+    pub fn ok(self, value: Value) {
+        self.send(json!({ "ok": true, "value": value }));
+    }
+
+    /// Refuses with one of the command's declared error codes.
+    pub fn refuse(self, error: Value) {
+        self.send(json!({ "ok": false, "error": error }));
+    }
+
+    fn send(self, result: Value) {
+        // The source was dropped; nothing is listening.
+        let _ = self.ops.send(Op::Reply {
+            connection: self.connection,
+            ack: self.ack,
+            result,
+        });
+    }
+}
+
+/// The running SDK thread. Dropping it disconnects.
+pub struct Worker {
+    ops: Sender<Op>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Worker {
+    /// Joins with `descriptor`, a `SourceDescriptor` in Simlink's handshake format, at `address` or wherever
+    /// discovery finds Simlink.
+    pub fn start(descriptor: Value, address: Option<String>, listeners: Listeners) -> Worker {
+        let (ops, receiver) = mpsc::channel();
+        let thread = Thread {
+            descriptor,
+            address,
+            listeners,
+            ops: receiver,
+            replies: ops.clone(),
+        };
+        let thread = std::thread::Builder::new()
+            .name("simlink-source".into())
+            .spawn(move || thread.run())
+            .expect("the OS refused to start the SDK thread");
+
+        Worker {
+            ops,
+            thread: Some(thread),
+        }
+    }
+
+    /// Queues the latest payload for `event`. Sent at most at the event's rate limit; dropped while disconnected.
+    pub fn emit(&self, event: &'static EventInfo, payload: &Value) -> Result<(), Error> {
+        let frame = Frame::event(NAMESPACE, event.name, payload);
+        // Refused here because Simlink would drop the connection instead.
+        if frame.size() > MAX_PAYLOAD_BYTES {
+            return Err(Error::InvalidArgument {
+                message: format!(
+                    "\"{}\" is {} bytes; Simlink accepts messages up to {MAX_PAYLOAD_BYTES} bytes",
+                    event.name,
+                    frame.size()
+                ),
+            });
+        }
+
+        // The thread only exits after drop.
+        let _ = self.ops.send(Op::Emit(event, frame));
+
+        Ok(())
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        let _ = self.ops.send(Op::Stop);
+
+        // Dropped from a listener callback: the thread exits once it returns.
+        if let Some(thread) = self
+            .thread
+            .take()
+            .filter(|thread| thread.thread().id() != std::thread::current().id())
+        {
+            let _ = thread.join();
+        }
+    }
+}
+
 enum Exit {
     Stop,
     Lost(String),
 }
 
-pub struct Worker<H> {
-    pub descriptor: Value,
+/// What the SDK thread owns.
+struct Thread {
+    descriptor: Value,
     /// Replaces discovery when set.
-    pub address: Option<String>,
-    pub handler: H,
-    pub ops: Receiver<Op>,
-    pub replies: Sender<Op>,
+    address: Option<String>,
+    listeners: Listeners,
+    ops: Receiver<Op>,
+    replies: Sender<Op>,
 }
 
-impl<H: Handler> Worker<H> {
-    pub fn run(mut self) {
+impl Thread {
+    fn run(self) {
         let mut backoff = MIN_BACKOFF;
-        // Numbers each joined session, so replies to an earlier one are dropped.
+        // Numbers each joined socket, so replies to an earlier one are dropped.
         let mut connection = 0;
 
         loop {
-            self.handler.state(ConnectionState::Searching);
+            self.listeners.state(ConnectionState::Searching);
 
             let Some(joined) = self.join() else { return };
             match joined {
-                Ok((address, session)) => {
+                Ok((address, socket)) => {
                     connection += 1;
                     log::info!("Connected to Simlink at {address}");
-                    self.handler.state(ConnectionState::Connected {
+                    self.listeners.state(ConnectionState::Connected {
                         address: address.to_string(),
                     });
 
                     let joined_at = Instant::now();
-                    match self.serve(session, connection) {
+                    match self.serve(socket, connection) {
                         Exit::Stop => return,
                         Exit::Lost(reason) => log::warn!("Lost Simlink: {reason}"),
                     }
@@ -71,11 +172,17 @@ impl<H: Handler> Worker<H> {
                         backoff = MIN_BACKOFF;
                     }
                 }
-                Err(JoinError::Rejected { code, message }) => {
+                Err(ConnectError::Refused { message, data }) => {
+                    let code = data
+                        .as_ref()
+                        .and_then(|data| data.get("code"))
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned();
                     log::warn!("Simlink refused the source: {code} {message}");
                     // An invalid descriptor fails the same way on every attempt.
                     let permanent = code == "HANDSHAKE_IDENTIFICATION_INVALID";
-                    self.handler.state(ConnectionState::Rejected {
+                    self.listeners.state(ConnectionState::Rejected {
                         code,
                         message,
                         retrying: !permanent,
@@ -86,7 +193,9 @@ impl<H: Handler> Worker<H> {
                         return;
                     }
                 }
-                Err(JoinError::Unreachable(reason)) => log::debug!("Simlink not found: {reason}"),
+                Err(ConnectError::Unreachable(reason)) => {
+                    log::debug!("Simlink not found: {reason}")
+                }
             }
 
             if self.wait_for_stop(Some(backoff)) {
@@ -97,7 +206,7 @@ impl<H: Handler> Worker<H> {
     }
 
     /// The first instance that answers, or `None` once the source is dropped.
-    fn join(&self) -> Option<Result<(SocketAddr, Session), JoinError>> {
+    fn join(&self) -> Option<Result<(SocketAddr, Socket), ConnectError>> {
         let stopped = std::cell::Cell::new(false);
         let try_all = |addresses: Vec<SocketAddr>| {
             for address in addresses {
@@ -106,10 +215,10 @@ impl<H: Handler> Worker<H> {
                     stopped.set(true);
                     return None;
                 }
-                match Session::join(address, &self.descriptor) {
-                    Ok(session) => return Some(Ok((address, session))),
-                    Err(rejected @ JoinError::Rejected { .. }) => return Some(Err(rejected)),
-                    Err(JoinError::Unreachable(reason)) => log::trace!("{reason}"),
+                match Socket::connect(address, SOCKET_IO_PATH, NAMESPACE, &self.descriptor) {
+                    Ok(socket) => return Some(Ok((address, socket))),
+                    Err(refused @ ConnectError::Refused { .. }) => return Some(Err(refused)),
+                    Err(ConnectError::Unreachable(reason)) => log::trace!("{reason}"),
                 }
             }
             None
@@ -119,7 +228,9 @@ impl<H: Handler> Worker<H> {
             Some(address) => match address.to_socket_addrs() {
                 Ok(resolved) => try_all(resolved.collect()),
                 Err(error) => {
-                    return Some(Err(JoinError::Unreachable(format!("{address}: {error}"))));
+                    return Some(Err(ConnectError::Unreachable(format!(
+                        "{address}: {error}"
+                    ))));
                 }
             },
             // mDNS is only browsed when no instance answers on this machine.
@@ -136,7 +247,7 @@ impl<H: Handler> Worker<H> {
             return None;
         }
         Some(found.unwrap_or_else(|| {
-            Err(JoinError::Unreachable(
+            Err(ConnectError::Unreachable(
                 "no Simlink instance answered".into(),
             ))
         }))
@@ -153,9 +264,9 @@ impl<H: Handler> Worker<H> {
         }
     }
 
-    fn serve(&mut self, mut session: Session, connection: u64) -> Exit {
-        // Latest payload per event, sent no faster than the event's rate limit.
-        let mut pending: HashMap<&'static str, (&'static EventInfo, String)> = HashMap::new();
+    fn serve(&self, mut socket: Socket, connection: u64) -> Exit {
+        // Latest frame per event, sent no faster than the event's rate limit.
+        let mut pending: HashMap<&'static str, (&'static EventInfo, Frame)> = HashMap::new();
         let mut last_sent: HashMap<&'static str, Instant> = HashMap::new();
 
         loop {
@@ -169,13 +280,13 @@ impl<H: Handler> Worker<H> {
                         ack,
                         result,
                     }) if target == connection => {
-                        if let Err(reason) = session.send(&wire::ack(NAMESPACE, ack, &result)) {
+                        if let Err(reason) = socket.ack(ack, &result) {
                             return Exit::Lost(reason);
                         }
                     }
                     Ok(Op::Reply { .. }) => {}
                     Ok(Op::Stop) | Err(TryRecvError::Disconnected) => {
-                        session.close();
+                        socket.close();
                         return Exit::Stop;
                     }
                     Err(TryRecvError::Empty) => break,
@@ -187,7 +298,7 @@ impl<H: Handler> Worker<H> {
 
             pending.retain(|name, (event, frame)| {
                 // Held back, the latest payload replaces older ones instead of queueing behind them.
-                if session.backlogged() {
+                if socket.backlogged() {
                     return true;
                 }
                 let due = match (event.max_rate_hz, last_sent.get(name)) {
@@ -201,58 +312,38 @@ impl<H: Handler> Worker<H> {
                 }
 
                 // A failed send surfaces as a lost connection on the next poll.
-                let _ = session.send(frame);
+                let _ = socket.send(frame);
                 last_sent.insert(name, now);
                 false
             });
 
-            match session.poll(wait) {
-                Received::Frame(inbound) => {
-                    if let Some(exit) = self.dispatch(inbound, connection) {
-                        return exit;
-                    }
-                }
+            match socket.poll(wait) {
+                Received::Event { name, args, ack } => self.dispatch(name, args, ack, connection),
                 Received::Idle => {}
                 Received::Lost(reason) => return Exit::Lost(reason),
             }
         }
     }
 
-    fn dispatch(&mut self, inbound: Inbound, connection: u64) -> Option<Exit> {
-        match inbound {
-            Inbound::Event {
-                name,
-                mut args,
+    fn dispatch(&self, name: String, mut args: Vec<Value>, ack: Option<u64>, connection: u64) {
+        let payload = if args.is_empty() {
+            Value::Null
+        } else {
+            args.swap_remove(0)
+        };
+
+        if name == ERROR_CHANNEL {
+            log::warn!("Simlink rejected data: {payload}");
+            self.listeners.rejected(&payload);
+        } else if let Some(ack) = ack {
+            let reply = Reply {
+                ops: self.replies.clone(),
+                connection,
                 ack,
-            } => {
-                let payload = if args.is_empty() {
-                    Value::Null
-                } else {
-                    args.swap_remove(0)
-                };
-
-                if name == ERROR_CHANNEL {
-                    log::warn!("Simlink rejected data: {payload}");
-                    self.handler.rejected(&payload);
-                } else if let Some(ack) = ack {
-                    let reply = Reply {
-                        ops: self.replies.clone(),
-                        connection,
-                        ack,
-                    };
-                    self.handler.command(Command {
-                        name,
-                        input: payload,
-                        reply,
-                    });
-                } else {
-                    log::debug!("Ignoring unexpected event {name}");
-                }
-
-                None
-            }
-            Inbound::Disconnected => Some(Exit::Lost("Simlink disconnected the source".into())),
-            _ => None,
+            };
+            self.listeners.command(&name, payload, reply);
+        } else {
+            log::debug!("Ignoring unexpected event {name}");
         }
     }
 

@@ -6,12 +6,10 @@
 
 uniffi::setup_scaffolding!();
 
-mod connection;
 mod discovery;
 mod logging;
-mod session;
+mod socket_io;
 mod source;
-mod wire;
 mod worker;
 
 /// Protocol types and typed channel methods, generated from Simlink's source manifest.
@@ -19,7 +17,7 @@ pub mod protocol {
     simlink_source_sdk_macros::protocol!("../../protocol/source-schema.json");
 }
 
-pub(crate) use connection::EventInfo;
 pub use logging::*;
 pub use protocol::*;
 pub use source::*;
+pub(crate) use worker::EventInfo;

@@ -136,7 +136,7 @@ fn decode_packet(packet: &str, namespace: &str) -> Option<Inbound> {
                 data: error.get("data").cloned(),
             })
         }
-        // Binary events and acks: Simlink sends none, and dropping one silently would lose a command.
+        // Binary events and acks aren't supported; dropping one silently could leave an ack request unanswered.
         "5" | "6" => None,
         _ => Some(Inbound::Ignored),
     }
@@ -148,7 +148,7 @@ mod tests {
 
     use super::*;
 
-    const NS: &str = "/v1/source";
+    const NS: &str = "/chat";
 
     #[test]
     fn decodes_engine_open() {
@@ -165,41 +165,35 @@ mod tests {
 
     #[test]
     fn decodes_namespace_connect_outcomes() {
-        assert_eq!(
-            decode(r#"40/v1/source,{"sid":"x"}"#, NS),
-            Ok(Inbound::Connected)
-        );
+        assert_eq!(decode(r#"40/chat,{"sid":"x"}"#, NS), Ok(Inbound::Connected));
         assert_eq!(
             decode(
-                r#"44/v1/source,{"message":"taken","data":{"code":"HANDSHAKE_SOURCE_ID_IN_USE"}}"#,
+                r#"44/chat,{"message":"taken","data":{"code":"NAME_TAKEN"}}"#,
                 NS
             ),
             Ok(Inbound::ConnectError {
                 message: "taken".into(),
-                data: Some(json!({ "code": "HANDSHAKE_SOURCE_ID_IN_USE" }))
+                data: Some(json!({ "code": "NAME_TAKEN" }))
             })
         );
-        assert_eq!(decode("41/v1/source,", NS), Ok(Inbound::Disconnected));
+        assert_eq!(decode("41/chat,", NS), Ok(Inbound::Disconnected));
     }
 
     #[test]
     fn decodes_events_with_and_without_acks() {
         assert_eq!(
-            decode(r#"42/v1/source,13["atis.get",{"icao":"ESSA"}]"#, NS),
+            decode(r#"42/chat,13["ask",{"question":"time"}]"#, NS),
             Ok(Inbound::Event {
-                name: "atis.get".into(),
-                args: vec![json!({ "icao": "ESSA" })],
+                name: "ask".into(),
+                args: vec![json!({ "question": "time" })],
                 ack: Some(13)
             })
         );
         assert_eq!(
-            decode(
-                r#"42/v1/source,["simlink:error",{"code":"INVALID_DATA"}]"#,
-                NS
-            ),
+            decode(r#"42/chat,["notice",{"level":"info"}]"#, NS),
             Ok(Inbound::Event {
-                name: "simlink:error".into(),
-                args: vec![json!({ "code": "INVALID_DATA" })],
+                name: "notice".into(),
+                args: vec![json!({ "level": "info" })],
                 ack: None
             })
         );
@@ -207,34 +201,25 @@ mod tests {
 
     #[test]
     fn ignores_other_namespaces() {
-        assert_eq!(
-            decode(r#"42/v1/consumer,["x",1]"#, NS),
-            Ok(Inbound::Ignored)
-        );
+        assert_eq!(decode(r#"42/admin,["x",1]"#, NS), Ok(Inbound::Ignored));
         assert_eq!(decode(r#"42["x",1]"#, NS), Ok(Inbound::Ignored));
     }
 
     #[test]
     fn rejects_malformed_frames() {
         assert!(decode("", NS).is_err());
-        assert!(decode("42/v1/source,[1]", NS).is_err());
-        assert!(decode("42/v1/source,12x", NS).is_err());
+        assert!(decode("42/chat,[1]", NS).is_err());
+        assert!(decode("42/chat,12x", NS).is_err());
     }
 
     #[test]
     fn encodes_outbound_packets() {
+        assert_eq!(connect(NS, &json!({ "id": "a" })), r#"40/chat,{"id":"a"}"#);
+        assert_eq!(event(NS, "update", &json!([])), r#"42/chat,["update",[]]"#);
         assert_eq!(
-            connect(NS, &json!({ "id": "a" })),
-            r#"40/v1/source,{"id":"a"}"#
+            ack(NS, 7, &json!({ "answer": 42 })),
+            r#"43/chat,7[{"answer":42}]"#
         );
-        assert_eq!(
-            event(NS, "telemetry.traffic", &json!([])),
-            r#"42/v1/source,["telemetry.traffic",[]]"#
-        );
-        assert_eq!(
-            ack(NS, 7, &json!({ "ok": true, "value": [] })),
-            r#"43/v1/source,7[{"ok":true,"value":[]}]"#
-        );
-        assert_eq!(disconnect(NS), "41/v1/source,");
+        assert_eq!(disconnect(NS), "41/chat,");
     }
 }

@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use crate::Event;
-use crate::connection::{self, Command, Connection, Handler};
+use crate::worker::{Reply, Worker};
 
 /// Why a call failed.
 #[derive(Clone, Debug, PartialEq, uniffi::Error)]
@@ -89,29 +89,30 @@ pub struct RejectionIssue {
 
 type CommandFn = Box<dyn Fn(Value, PendingReply) + Send + Sync>;
 
+/// Where the SDK thread delivers commands, connection changes and rejections.
 #[derive(Default)]
-struct Listeners {
+pub(crate) struct Listeners {
     commands: HashMap<&'static str, CommandFn>,
     state: Option<Arc<dyn StateListener>>,
     rejected: Option<Arc<dyn RejectionListener>>,
 }
 
-impl Handler for Listeners {
-    fn command(&mut self, command: Command) {
-        match self.commands.get(command.name.as_str()) {
-            Some(handle) => shield(&command.name, || {
-                handle(command.input, PendingReply(Mutex::new(Some(command.reply))));
+impl Listeners {
+    pub(crate) fn command(&self, name: &str, input: Value, reply: Reply) {
+        match self.commands.get(name) {
+            Some(handle) => shield(name, || {
+                handle(input, PendingReply(Mutex::new(Some(reply))));
             }),
-            None => log::warn!("No handler for {}", command.name),
+            None => log::warn!("No handler for {name}"),
         }
     }
 
-    fn state(&mut self, state: ConnectionState) {
+    pub(crate) fn state(&self, state: ConnectionState) {
         let Some(listener) = &self.state else { return };
         shield("the state listener", || listener.changed(state));
     }
 
-    fn rejected(&mut self, frame: &Value) {
+    pub(crate) fn rejected(&self, frame: &Value) {
         let Some(listener) = &self.rejected else {
             return;
         };
@@ -163,7 +164,7 @@ struct Setup {
 
 enum Lifecycle {
     Configuring(Setup),
-    Running(Connection),
+    Running(Worker),
 }
 
 /// A connection to Simlink. Register handlers and listeners, then `start`. Dropping it disconnects.
@@ -214,7 +215,7 @@ impl Source {
         descriptor["capabilities"] = json!({ "events": events, "commands": commands });
 
         let Setup { listeners, address } = std::mem::take(setup);
-        *lifecycle = Lifecycle::Running(Connection::start(descriptor, address, listeners));
+        *lifecycle = Lifecycle::Running(Worker::start(descriptor, address, listeners));
 
         Ok(())
     }
@@ -237,7 +238,7 @@ impl Source {
             Lifecycle::Running(_) if !self.events.contains(&event) => Err(Error::Undeclared {
                 message: format!("\"{}\" is not declared in the source descriptor", info.name),
             }),
-            Lifecycle::Running(connection) => connection.emit(info, &payload),
+            Lifecycle::Running(worker) => worker.emit(info, &payload),
             Lifecycle::Configuring(_) => Err(Error::WrongState {
                 message: "start the source before emitting".into(),
             }),
@@ -273,7 +274,7 @@ impl Source {
 }
 
 /// One command's answer, given at most once.
-pub(crate) struct PendingReply(Mutex<Option<connection::Reply>>);
+pub(crate) struct PendingReply(Mutex<Option<Reply>>);
 
 impl PendingReply {
     pub(crate) fn ok(&self, value: &impl Serialize) -> Result<(), Error> {
@@ -292,7 +293,7 @@ impl PendingReply {
         Ok(())
     }
 
-    fn take(&self) -> Result<connection::Reply, Error> {
+    fn take(&self) -> Result<Reply, Error> {
         self.0
             .lock()
             .expect("reply lock")

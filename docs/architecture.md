@@ -10,8 +10,9 @@ protocol/source-schema.json         Simlink's source manifest
 
 - **Bindings are generated, never checked in.** `xtask/src/generators.rs` pins both generators to UniFFI's minor
   version. C# uses [our fork](https://github.com/Navigraph/uniffi-bindgen-cs) until upstream releases our fixes.
-- **The Socket.IO codec is our own** (`crates/simlink-source-sdk/src/wire.rs`): no Rust client answers server-initiated
-  acks, which is how Simlink sends commands.
+- **The Socket.IO client is our own** (`crates/simlink-source-sdk/src/socket_io`): no Rust client answers
+  server-initiated acks, which is how Simlink sends commands. It knows nothing about Simlink; everything
+  Simlink-specific lives outside it.
 - **Each source runs one thread** (`crates/simlink-source-sdk/src/worker.rs`) that discovers Simlink, joins, sends each
   event's latest payload at its rate limit, and reconnects with backoff.
 - **The socket is non-blocking after the upgrade**, since Windows sockets are unreliable once a read times out.
