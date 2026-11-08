@@ -28,7 +28,6 @@ pub fn package() -> Result<()> {
     if cfg!(windows) {
         archive.add("bindings/cpp/prebuilt/simlink-source-sdk.props", "")?;
     }
-    archive.add("bindings/cpp/cmake/system-libraries.cmake", "cmake")?;
     for header in [
         "simlink_source_sdk.hpp",
         "simlink_source_sdk_scaffolding.hpp",

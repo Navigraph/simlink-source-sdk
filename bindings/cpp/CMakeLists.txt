@@ -20,7 +20,9 @@ add_library(simlink-source-sdk::simlink-source-sdk ALIAS simlink_source_sdk)
 target_compile_features(simlink_source_sdk PUBLIC cxx_std_20)
 target_include_directories(simlink_source_sdk PUBLIC "${SIMLINK_SOURCE_SDK_BINDINGS_DIR}")
 
-include("${CMAKE_CURRENT_LIST_DIR}/cmake/system-libraries.cmake")
 target_link_libraries(simlink_source_sdk PUBLIC
-  "${SIMLINK_SOURCE_SDK_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}simlink_source_sdk${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  ${SIMLINK_SOURCE_SDK_SYSTEM_LIBRARIES})
+  "${SIMLINK_SOURCE_SDK_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}simlink_source_sdk${CMAKE_STATIC_LIBRARY_SUFFIX}")
+# Rust's standard library imports from these, which MSVC doesn't link by default.
+if(WIN32)
+  target_link_libraries(simlink_source_sdk PUBLIC ntdll userenv)
+endif()
