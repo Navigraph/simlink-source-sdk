@@ -8,6 +8,7 @@ uniffi::setup_scaffolding!();
 
 mod connection;
 mod discovery;
+mod logging;
 mod session;
 mod source;
 mod wire;
@@ -19,5 +20,6 @@ pub mod protocol {
 }
 
 pub(crate) use connection::EventInfo;
+pub use logging::*;
 pub use protocol::*;
 pub use source::*;
