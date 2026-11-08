@@ -95,20 +95,21 @@ impl Connection {
     }
 
     /// Queues the latest payload for `event`. Sent at most at the event's rate limit; dropped while disconnected.
-    pub fn emit(&self, event: &'static EventInfo, payload: Value) -> Result<(), Error> {
+    pub fn emit(&self, event: &'static EventInfo, payload: &Value) -> Result<(), Error> {
+        let frame = wire::event(NAMESPACE, event.name, payload);
         // Refused here because Simlink would drop the connection instead.
-        let size = wire::event(NAMESPACE, event.name, &payload).len();
-        if size > MAX_PAYLOAD_BYTES {
+        if frame.len() > MAX_PAYLOAD_BYTES {
             return Err(Error::InvalidArgument {
                 message: format!(
-                    "\"{}\" is {size} bytes; Simlink accepts messages up to {MAX_PAYLOAD_BYTES} bytes",
-                    event.name
+                    "\"{}\" is {} bytes; Simlink accepts messages up to {MAX_PAYLOAD_BYTES} bytes",
+                    event.name,
+                    frame.len()
                 ),
             });
         }
 
         // The worker only exits after drop.
-        let _ = self.ops.send(Op::Emit(event, payload));
+        let _ = self.ops.send(Op::Emit(event, frame));
 
         Ok(())
     }

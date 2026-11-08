@@ -19,7 +19,8 @@ const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(10);
 
 pub enum Op {
-    Emit(&'static EventInfo, Value),
+    /// The event and its encoded frame.
+    Emit(&'static EventInfo, String),
     Reply {
         connection: u64,
         ack: u64,
@@ -154,14 +155,14 @@ impl<H: Handler> Worker<H> {
 
     fn serve(&mut self, mut session: Session, connection: u64) -> Exit {
         // Latest payload per event, sent no faster than the event's rate limit.
-        let mut pending: HashMap<&'static str, (&'static EventInfo, Value)> = HashMap::new();
+        let mut pending: HashMap<&'static str, (&'static EventInfo, String)> = HashMap::new();
         let mut last_sent: HashMap<&'static str, Instant> = HashMap::new();
 
         loop {
             loop {
                 match self.ops.try_recv() {
-                    Ok(Op::Emit(event, payload)) => {
-                        pending.insert(event.name, (event, payload));
+                    Ok(Op::Emit(event, frame)) => {
+                        pending.insert(event.name, (event, frame));
                     }
                     Ok(Op::Reply {
                         connection: target,
@@ -184,7 +185,7 @@ impl<H: Handler> Worker<H> {
             let now = Instant::now();
             let mut wait = POLL_INTERVAL;
 
-            pending.retain(|name, (event, payload)| {
+            pending.retain(|name, (event, frame)| {
                 // Held back, the latest payload replaces older ones instead of queueing behind them.
                 if session.backlogged() {
                     return true;
@@ -200,7 +201,7 @@ impl<H: Handler> Worker<H> {
                 }
 
                 // A failed send surfaces as a lost connection on the next poll.
-                let _ = session.send(&wire::event(NAMESPACE, name, payload));
+                let _ = session.send(frame);
                 last_sent.insert(name, now);
                 false
             });

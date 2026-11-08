@@ -294,7 +294,7 @@ impl Source {
             Lifecycle::Running(_) if !self.events.contains(&event) => Err(Error::Undeclared {
                 message: format!("\"{}\" is not declared in the source descriptor", info.name),
             }),
-            Lifecycle::Running(connection) => connection.emit(info, payload),
+            Lifecycle::Running(connection) => connection.emit(info, &payload),
             Lifecycle::Configuring(_) => Err(Error::WrongState {
                 message: "start the source before emitting".into(),
             }),
