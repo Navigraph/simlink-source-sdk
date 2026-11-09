@@ -14,7 +14,7 @@ simlink-source-sdk-macros = { path = "crates/simlink-source-sdk-macros" }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-jsonschema = { version = "0.59", default-features = false }
+jsonschema = { version = "0.61", default-features = false }
 log = "0.4"
 mdns-sd = "0.21"
 proc-macro2 = "1"
