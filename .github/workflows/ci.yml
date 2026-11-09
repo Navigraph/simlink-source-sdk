@@ -37,3 +37,20 @@ jobs:
       - run: cargo xtask examples
       - run: cargo xtask docs --check
         if: runner.os == 'Linux'
+
+  # rust-toolchain.toml pins what we develop with; this checks the oldest Rust that `rust-version` promises.
+  msrv:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the workspace's rust-version
+        run: |
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          rustup toolchain install "$msrv" --profile minimal
+          echo "MSRV=$msrv" >> "$GITHUB_ENV"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo +"$MSRV" check --workspace --all-targets --locked

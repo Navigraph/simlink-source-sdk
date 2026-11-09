@@ -7,7 +7,7 @@ version = "1.0.0-rc1"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/Navigraph/simlink-source-sdk"
-rust-version = "1.99"
+rust-version = "1.88"
 
 [workspace.dependencies]
 simlink-source-sdk-macros = { path = "crates/simlink-source-sdk-macros" }
