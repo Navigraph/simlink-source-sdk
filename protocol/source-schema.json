@@ -4,8 +4,6 @@
     "defaultPort": 5917,
     "portProbeLimit": 10,
     "mdnsServiceType": "_simlink._tcp.local",
-    "mdnsInstanceName": "Simlink ({user-sub})",
-    "mdnsHostname": "{user-sub}-simlink",
     "mdnsTxt": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
