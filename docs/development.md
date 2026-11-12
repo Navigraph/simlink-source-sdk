@@ -62,14 +62,11 @@ Watch for collisions: `Error` is exported as `SimlinkError`, since the C# genera
 
 ### Protocol updates
 
-`protocol/source-schema.json` arrives as pull requests from the Simlink repository; see `protocol/README.md`. Don't
-edit it by hand.
+`protocol/source-schema.json` arrives as pull requests from the Simlink repository. Don't edit it by hand.
 
-The types and `Source` methods follow the manifest on the next build. A new channel also needs its types listed in
-`crates/simlink-source-sdk/tests/schema.rs`, which compares its list against the manifest's channels and fails until
-they match. A new event or command should usually get an example too.
-
-The macro fails the build on anything in the manifest the SDK doesn't support yet, with an error pointing at it.
+The types and `Source` methods follow the manifest on the next build, and the macro fails the build on any key it
+neither reads nor ignores on purpose. `protocol/README.md` has the checklist for reviewing an update: what the build
+catches, and what it can't.
 
 ### Updating UniFFI or a generator
 
