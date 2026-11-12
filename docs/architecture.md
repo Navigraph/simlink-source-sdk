@@ -63,6 +63,9 @@ protocol/source-schema.json
 - **Connection constants**: protocol version, namespace, default port and probe limit, mDNS service type, error
   channel, Socket.IO path and message size limit, and the rate limit per event.
 
+In `crates/simlink-source-sdk-macros/src`, `manifest.rs` reads the manifest into a model and checks it, and
+`types.rs`, `api.rs`, `codes.rs` and `consts.rs` each generate their part of the output from that model.
+
 Before handing schemas to typify, the macro strips what Simlink validates anyway (`minLength`, `pattern`, `format`,
 defaults, and `const` properties with a default). Otherwise typify would turn them into validating newtypes or fields
 integrators must fill in. Channel descriptions and deprecations carry over as doc comments and `#[deprecated]`.
