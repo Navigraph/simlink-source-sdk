@@ -57,6 +57,9 @@ protocol/source-schema.json
 - **`Event`**, one variant per event channel, and an `emit_<event>` method on `Source` for each.
 - **Per command**: a `<Command>Handler` foreign trait, a `<Command>Reply` object with `ok` and `refuse`, and an
   `on_<command>` method on `Source` to register the handler.
+- **Codes**: `HandshakeError` from the manifest's handshake errors, with each one's metadata as fields;
+  `RejectionCode` from the error frame's codes; and `Channel`, every event and command, for rejections. Each has an
+  `Other` variant for what a newer Simlink sends, and `wire_code` or `wire_name` for the name Simlink sends.
 - **Connection constants**: protocol version, namespace, default port and probe limit, mDNS service type, error
   channel, Socket.IO path and message size limit, and the rate limit per event.
 
@@ -65,7 +68,8 @@ defaults, and `const` properties with a default). Otherwise typify would turn th
 integrators must fill in. Channel descriptions and deprecations carry over as doc comments and `#[deprecated]`.
 
 The macro fails the build when the manifest has something the SDK doesn't handle: a channel that doesn't originate
-from the source, or a missing field the core reads by name. `include_bytes!` on the manifest rebuilds the crate
+from the source, a missing field the core reads by name, or handshake error metadata that isn't a string, number,
+boolean or array of them. `include_bytes!` on the manifest rebuilds the crate
 whenever it changes.
 
 ## The core

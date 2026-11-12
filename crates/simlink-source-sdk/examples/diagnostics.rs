@@ -21,14 +21,20 @@ impl StateListener for State {
             ConnectionState::Searching => println!("Searching for Simlink"),
             ConnectionState::Connected { address } => println!("Connected to {address}"),
             ConnectionState::Rejected {
-                code,
+                error,
                 message,
                 retrying,
             } => {
                 println!(
-                    "Refused ({code}): {message}{}",
+                    "Refused ({}): {message}{}",
+                    error.wire_code(),
                     if retrying { ", retrying" } else { "" }
-                )
+                );
+                if let HandshakeError::IdentificationInvalid { issues } = error {
+                    for issue in issues {
+                        println!("  {issue}");
+                    }
+                }
             }
         }
     }
@@ -44,7 +50,11 @@ impl RejectionListener for Rejections {
             message,
             issues,
         } = rejection;
-        println!("Simlink rejected {channel} ({code}): {message}");
+        println!(
+            "Simlink rejected {} ({}): {message}",
+            channel.wire_name(),
+            code.wire_code()
+        );
         for issue in issues {
             println!("  {}: {}", issue.path, issue.message);
         }

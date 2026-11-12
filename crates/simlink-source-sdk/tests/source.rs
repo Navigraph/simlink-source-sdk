@@ -29,16 +29,10 @@ fn source(server: &Server, events: Vec<Event>) -> Source {
     source
 }
 
-/// A refusal code, checked against the manifest so a rename there fails here.
-fn refusal(code: &str) -> &str {
-    let known = MANIFEST["handshakeErrors"]["oneOf"].as_array().unwrap();
-    assert!(
-        known
-            .iter()
-            .any(|error| error["properties"]["code"]["const"] == code),
-        "{code} is not in the manifest"
-    );
-    code
+/// A handshake error, checked against the manifest so a change there fails here.
+fn refusal(error: Value) -> Value {
+    valid("handshake error", &MANIFEST["handshakeErrors"], &error).unwrap();
+    error
 }
 
 fn ownship(latitude: f64) -> TelemetryOwnship {
@@ -276,13 +270,32 @@ fn relays_simlink_rejections() {
     assert_eq!(
         rejections.recv_timeout(WAIT),
         Ok(Rejection {
-            channel: "telemetry.traffic".into(),
-            code: "INVALID_DATA".into(),
+            channel: Channel::TelemetryTraffic,
+            code: RejectionCode::InvalidData,
             message: "bad traffic".into(),
             issues: vec![RejectionIssue {
                 path: "[3].aircraft.position".into(),
+                code: "invalid_type".into(),
                 message: "Required".into(),
             }],
+        })
+    );
+
+    // From a newer Simlink.
+    server.send_error(
+        json!({ "event": "telemetry.future", "code": "FUTURE_CODE", "message": "later" }),
+    );
+    assert_eq!(
+        rejections.recv_timeout(WAIT),
+        Ok(Rejection {
+            channel: Channel::Other {
+                name: "telemetry.future".into()
+            },
+            code: RejectionCode::Other {
+                code: "FUTURE_CODE".into()
+            },
+            message: "later".into(),
+            issues: vec![],
         })
     );
 }
@@ -415,8 +428,10 @@ fn drops_promptly_while_searching() {
 #[test]
 fn retries_a_refusal_that_can_clear() {
     let server = Server::start();
-    let code = refusal("HANDSHAKE_SOURCE_ID_IN_USE");
-    server.refuse_next_join(code);
+    server.refuse_next_join(refusal(json!({
+        "code": "HANDSHAKE_SOURCE_ID_IN_USE",
+        "metadata": { "sourceId": "test" },
+    })));
     let source = source(&server, vec![]);
     let states = states(&source);
     source.start().unwrap();
@@ -424,8 +439,33 @@ fn retries_a_refusal_that_can_clear() {
     assert_eq!(
         wait_for_state(&states, rejected),
         ConnectionState::Rejected {
-            code: code.into(),
-            message: format!("Refused: {code}"),
+            error: HandshakeError::SourceIdInUse {
+                source_id: "test".into()
+            },
+            message: "Refused: HANDSHAKE_SOURCE_ID_IN_USE".into(),
+            retrying: true,
+        }
+    );
+    server
+        .wait_for_join(WAIT)
+        .expect("the source joins on its next attempt");
+}
+
+#[test]
+fn retries_a_refusal_newer_than_the_sdk() {
+    let server = Server::start();
+    server.refuse_next_join(json!({ "code": "HANDSHAKE_FROM_A_NEWER_SIMLINK" }));
+    let source = source(&server, vec![]);
+    let states = states(&source);
+    source.start().unwrap();
+
+    assert_eq!(
+        wait_for_state(&states, rejected),
+        ConnectionState::Rejected {
+            error: HandshakeError::Other {
+                code: "HANDSHAKE_FROM_A_NEWER_SIMLINK".into()
+            },
+            message: "Refused: HANDSHAKE_FROM_A_NEWER_SIMLINK".into(),
             retrying: true,
         }
     );
@@ -437,7 +477,10 @@ fn retries_a_refusal_that_can_clear() {
 #[test]
 fn drops_emits_while_disconnected() {
     let server = Server::start();
-    server.refuse_next_join(refusal("HANDSHAKE_SOURCE_ID_IN_USE"));
+    server.refuse_next_join(refusal(json!({
+        "code": "HANDSHAKE_SOURCE_ID_IN_USE",
+        "metadata": { "sourceId": "test" },
+    })));
     let source = source(&server, vec![Event::TelemetryOwnship]);
     let states = states(&source);
     source.start().unwrap();
@@ -459,8 +502,10 @@ fn drops_emits_while_disconnected() {
 #[test]
 fn stops_after_an_invalid_identification() {
     let server = Server::start();
-    let code = refusal("HANDSHAKE_IDENTIFICATION_INVALID");
-    server.refuse_next_join(code);
+    server.refuse_next_join(refusal(json!({
+        "code": "HANDSHAKE_IDENTIFICATION_INVALID",
+        "metadata": { "issues": ["id: Required"] },
+    })));
     let source = source(&server, vec![]);
     let states = states(&source);
     source.start().unwrap();
@@ -468,8 +513,10 @@ fn stops_after_an_invalid_identification() {
     assert_eq!(
         wait_for_state(&states, rejected),
         ConnectionState::Rejected {
-            code: code.into(),
-            message: format!("Refused: {code}"),
+            error: HandshakeError::IdentificationInvalid {
+                issues: vec!["id: Required".into()]
+            },
+            message: "Refused: HANDSHAKE_IDENTIFICATION_INVALID".into(),
             retrying: false,
         }
     );

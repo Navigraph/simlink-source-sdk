@@ -37,22 +37,32 @@ class ConsoleLog : LogListener
 
 class State : StateListener
 {
-    public void Changed(ConnectionState state) => Console.WriteLine(state switch
+    public void Changed(ConnectionState state)
     {
-        ConnectionState.Searching => "Searching for Simlink",
-        ConnectionState.Connected connected => $"Connected to {connected.Address}",
-        ConnectionState.Rejected rejected =>
-            $"Refused ({rejected.Code}): {rejected.Message}"
-                + (rejected.Retrying ? ", retrying" : ""),
-        _ => throw new UnreachableException(),
-    });
+        Console.WriteLine(state switch
+        {
+            ConnectionState.Searching => "Searching for Simlink",
+            ConnectionState.Connected connected => $"Connected to {connected.Address}",
+            ConnectionState.Rejected rejected =>
+                $"Refused ({rejected.Error.WireCode()}): {rejected.Message}"
+                    + (rejected.Retrying ? ", retrying" : ""),
+            _ => throw new UnreachableException(),
+        });
+        if (state is ConnectionState.Rejected { Error: HandshakeError.IdentificationInvalid invalid })
+        {
+            foreach (var issue in invalid.Issues)
+            {
+                Console.WriteLine($"  {issue}");
+            }
+        }
+    }
 }
 
 class Rejections : RejectionListener
 {
     public void Rejected(Rejection rejection)
     {
-        Console.WriteLine($"Simlink rejected {rejection.Channel} ({rejection.Code}): {rejection.Message}");
+        Console.WriteLine($"Simlink rejected {rejection.Channel.WireName()} ({rejection.Code.WireCode()}): {rejection.Message}");
         foreach (var issue in rejection.Issues)
         {
             Console.WriteLine($"  {issue.Path}: {issue.Message}");

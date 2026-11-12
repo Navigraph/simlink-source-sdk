@@ -259,8 +259,10 @@ dispose the reply once answered.
 
 ### Diagnostics
 
-- **State listener**: searching, connected, or refused by Simlink, with whether the SDK is retrying.
-- **Rejection listener**: Simlink found a payload or answer invalid, with the path and reason for each field.
+- **State listener**: searching, connected, or refused by Simlink, with whether the SDK is retrying. A refusal is a
+  `HandshakeError` with its details, such as the descriptor's issues when it fails validation.
+- **Rejection listener**: Simlink found a payload or answer invalid, with the channel, a `RejectionCode`, and the path
+  and reason for each field.
 - **`set_logger`**: the SDK's own logs, up to a level. Only the first call per process takes effect.
 
 ### Threading

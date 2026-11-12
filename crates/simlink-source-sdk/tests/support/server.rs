@@ -57,7 +57,7 @@ struct State {
     events: Vec<(String, Value)>,
     /// How many of each channel's events `wait_for_event` has returned.
     seen: HashMap<String, usize>,
-    refusals: VecDeque<String>,
+    refusals: VecDeque<Value>,
     leaves: usize,
     pongs: usize,
     violations: Vec<String>,
@@ -204,9 +204,9 @@ impl Server {
         });
     }
 
-    /// Refuses the next handshake with `code`.
-    pub fn refuse_next_join(&self, code: &str) {
-        self.lock().refusals.push_back(code.to_owned());
+    /// Refuses the next handshake with `error`, a handshake error from the manifest.
+    pub fn refuse_next_join(&self, error: Value) {
+        self.lock().refusals.push_back(error);
     }
 
     /// Removes every source from the namespace but keeps its connection open.
@@ -506,13 +506,13 @@ impl Connection<'_> {
         true
     }
 
-    /// Admits the source, or refuses it with socket.io's `CONNECT_ERROR` and the refusal code in `data`.
+    /// Admits the source, or refuses it with socket.io's `CONNECT_ERROR` and the handshake error in `data`.
     fn join(&mut self, descriptor: Value) {
         let (outbox, inbox) = mpsc::channel();
         let mut refusal = None;
         self.shared
             .update(|state| match state.refusals.pop_front() {
-                Some(code) => refusal = Some(code),
+                Some(error) => refusal = Some(error),
                 None => {
                     state.outboxes.push(outbox);
                     state.joins.push_back(descriptor);
@@ -520,9 +520,9 @@ impl Connection<'_> {
             });
 
         match refusal {
-            Some(code) => {
-                let error =
-                    json!({ "message": format!("Refused: {code}"), "data": { "code": code } });
+            Some(error) => {
+                let code = error["code"].as_str().unwrap_or_default();
+                let error = json!({ "message": format!("Refused: {code}"), "data": error });
                 self.send(&packet('4', &error.to_string()));
             }
             None => {

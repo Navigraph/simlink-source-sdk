@@ -13,7 +13,7 @@ use socket_io::{Client, ConnectError, DisconnectReason, Event, Frame, Options, R
 use crate::discovery;
 use crate::protocol::{ERROR_CHANNEL, MAX_PAYLOAD_BYTES, NAMESPACE, SOCKET_IO_PATH};
 use crate::source::Listeners;
-use crate::{ConnectionState, Error};
+use crate::{ConnectionState, Error, HandshakeError};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
@@ -261,17 +261,19 @@ impl Thread {
                     }
                 }
                 Event::ConnectError(ConnectError::Refused { message, data }) => {
-                    let code = data
-                        .as_ref()
-                        .and_then(|data| data.get("code"))
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_owned();
-                    log::warn!("Simlink refused the source: {code} {message}");
+                    let data = data.unwrap_or_default();
+                    let error = HandshakeError::read(
+                        data["code"].as_str().unwrap_or_default(),
+                        &data["metadata"],
+                    );
+                    log::warn!(
+                        "Simlink refused the source: {} {message}",
+                        error.wire_code()
+                    );
                     // An invalid descriptor fails the same way on every attempt.
-                    let permanent = code == "HANDSHAKE_IDENTIFICATION_INVALID";
+                    let permanent = matches!(error, HandshakeError::IdentificationInvalid { .. });
                     self.listeners.state(ConnectionState::Rejected {
-                        code,
+                        error,
                         message,
                         retrying: !permanent,
                     });

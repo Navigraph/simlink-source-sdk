@@ -9,8 +9,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-use crate::Event;
 use crate::worker::{Reply, Worker};
+use crate::{Channel, Event, HandshakeError, RejectionCode};
 
 /// Why a call failed.
 #[derive(Clone, Debug, PartialEq, uniffi::Error)]
@@ -40,15 +40,15 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /// Where a source is in finding and joining Simlink.
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
+#[derive(Clone, Debug, PartialEq, uniffi::Enum)]
 pub enum ConnectionState {
     /// Looking for Simlink, or waiting before the next attempt.
     Searching,
     /// Joined Simlink at `address`.
     Connected { address: String },
-    /// Simlink refused the handshake with one of the manifest's handshake error codes.
+    /// Simlink refused the handshake.
     Rejected {
-        code: String,
+        error: HandshakeError,
         message: String,
         /// False when the refusal would repeat, such as an invalid descriptor; the source then stops.
         retrying: bool,
@@ -70,10 +70,8 @@ pub trait RejectionListener: Send + Sync {
 /// Why Simlink rejected a payload or answer.
 #[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct Rejection {
-    /// The event or command.
-    pub channel: String,
-    /// Simlink's error code, such as `INVALID_DATA`.
-    pub code: String,
+    pub channel: Channel,
+    pub code: RejectionCode,
     pub message: String,
     /// Each field that failed validation.
     pub issues: Vec<RejectionIssue>,
@@ -84,6 +82,8 @@ pub struct Rejection {
 pub struct RejectionIssue {
     /// Where in the payload, such as `aircraft.position.latitude` or `[3].key`.
     pub path: String,
+    /// The validator's code, such as `invalid_type`.
+    pub code: String,
     pub message: String,
 }
 
@@ -119,13 +119,14 @@ impl Listeners {
         let text = |value: &Value| value.as_str().unwrap_or_default().to_owned();
         let issues = frame["issues"].as_array().map_or(&[][..], Vec::as_slice);
         let rejection = Rejection {
-            channel: text(&frame["event"]),
-            code: text(&frame["code"]),
+            channel: Channel::read(frame["event"].as_str().unwrap_or_default()),
+            code: RejectionCode::read(frame["code"].as_str().unwrap_or_default(), &Value::Null),
             message: text(&frame["message"]),
             issues: issues
                 .iter()
                 .map(|issue| RejectionIssue {
                     path: issue_path(&issue["path"]),
+                    code: text(&issue["code"]),
                     message: text(&issue["message"]),
                 })
                 .collect(),

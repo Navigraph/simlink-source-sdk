@@ -1,8 +1,9 @@
 //! `protocol!("path/to/source-schema.json")`: Simlink's source manifest as exported Rust items.
 //!
 //! Emits the protocol's types (via typify), the `Event` enum, typed `Source` methods per event
-//! and command, a handler trait and reply object per command, and the constants and event table
-//! the SDK connects with. Every API item is a UniFFI item, so bindings never read the manifest.
+//! and command, a handler trait and reply object per command, the codes Simlink refuses and
+//! rejects with, and the constants and event table the SDK connects with. Every API item is a
+//! UniFFI item, so bindings never read the manifest.
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -25,6 +26,7 @@ pub fn expand(path: &LitStr) -> syn::Result<TokenStream> {
 
     let (types, idents) = protocol.types().map_err(fail)?;
     let api = protocol.api(&idents);
+    let codes = protocol.codes();
     let tables = protocol.tables(&manifest["connection"]).map_err(fail)?;
 
     Ok(quote! {
@@ -33,6 +35,7 @@ pub fn expand(path: &LitStr) -> syn::Result<TokenStream> {
 
         #types
         #api
+        #codes
         #tables
     })
 }
@@ -104,12 +107,23 @@ struct CommandChannel {
     error: usize,
 }
 
+/// One of the codes Simlink refuses a handshake or rejects a frame with.
+struct Code {
+    code: String,
+    doc: String,
+    variant: syn::Ident,
+    /// Each metadata field: its key, Rust name and type.
+    fields: Vec<(String, syn::Ident, TokenStream)>,
+}
+
 #[derive(Default)]
 struct Protocol {
     defs: Map<String, Value>,
     roots: Vec<Root>,
     events: Vec<EventChannel>,
     commands: Vec<CommandChannel>,
+    handshake_errors: Vec<Code>,
+    rejection_codes: Vec<Code>,
 }
 
 impl Protocol {
@@ -140,13 +154,36 @@ impl Protocol {
     fn load(&mut self, manifest: &mut Value) -> Result<(), String> {
         self.load_descriptor(&mut manifest["descriptor"])?;
 
+        let errors = manifest["handshakeErrors"]["oneOf"]
+            .as_array()
+            .ok_or("handshakeErrors.oneOf is missing")?;
+        self.handshake_errors = errors
+            .iter()
+            .map(handshake_error)
+            .collect::<Result<_, _>>()?;
+
+        let code = &manifest["errorFrame"]["properties"]["code"];
+        let codes = match (&code["const"], &code["enum"]) {
+            (Value::String(code), _) => vec![code.clone()],
+            (_, Value::Array(codes)) => codes
+                .iter()
+                .map(|code| code.as_str().map(str::to_owned))
+                .collect::<Option<_>>()
+                .ok_or("errorFrame.properties.code.enum has a code that isn't a string")?,
+            _ => return Err("errorFrame.properties.code has no const or enum".into()),
+        };
+        self.rejection_codes = codes
+            .into_iter()
+            .map(|code| new_code(code, "", String::new(), Vec::new()))
+            .collect::<Result<_, _>>()?;
+
         // The rejection listener reads these frame fields by name.
         for key in [
             "event",
-            "code",
             "message",
             "issues/items/properties/path",
             "issues/items/properties/message",
+            "issues/items/properties/code",
         ] {
             field(
                 &manifest["errorFrame"],
@@ -401,6 +438,70 @@ impl Protocol {
         }
     }
 
+    /// `HandshakeError`, `RejectionCode` and `Channel`, each with an `Other` variant for what a newer Simlink sends.
+    fn codes(&self) -> TokenStream {
+        let handshake_error = code_enum(
+            "HandshakeError",
+            "Why Simlink refused the handshake.",
+            &self.handshake_errors,
+        );
+        let rejection_code = code_enum(
+            "RejectionCode",
+            "Why Simlink rejected a payload or answer.",
+            &self.rejection_codes,
+        );
+
+        let channels = self
+            .events
+            .iter()
+            .map(|event| &event.channel)
+            .chain(self.commands.iter().map(|command| &command.channel));
+        let (variants, reads, names): (Vec<_>, Vec<_>, Vec<_>) = channels
+            .map(|Channel { name, doc, .. }| {
+                let variant = format_ident!("{}", pascal(name));
+                (
+                    quote!(#[doc = #doc] #variant),
+                    quote!(#name => Self::#variant),
+                    quote!(Self::#variant => #name),
+                )
+            })
+            .collect();
+
+        quote! {
+            #handshake_error
+            #rejection_code
+
+            /// An event or command, as Simlink names it in a rejection.
+            #[derive(Clone, Debug, PartialEq, Eq, ::uniffi::Enum)]
+            pub enum Channel {
+                #( #variants, )*
+                /// A channel this SDK doesn't know, from a newer Simlink.
+                Other { name: String },
+            }
+
+            impl Channel {
+                pub(crate) fn read(name: &str) -> Self {
+                    match name {
+                        #( #reads, )*
+                        name => Self::Other { name: name.to_owned() },
+                    }
+                }
+            }
+
+            #[::uniffi::export]
+            impl Channel {
+                /// The name as Simlink sends it, such as `telemetry.ownship`.
+                pub fn wire_name(&self) -> String {
+                    match self {
+                        #( #names, )*
+                        Self::Other { name } => name,
+                    }
+                    .to_owned()
+                }
+            }
+        }
+    }
+
     fn tables(&self, connection: &Value) -> Result<TokenStream, String> {
         let number = |key| field(connection, "connection", key, Value::as_u64);
         let text = |key| field(connection, "connection", key, Value::as_str);
@@ -443,6 +544,155 @@ impl Protocol {
             pub(crate) const MAX_PAYLOAD_BYTES: usize = #max_payload_bytes;
             pub(crate) const EVENTS: &[crate::EventInfo] = &[#(#events),*];
         })
+    }
+}
+
+/// A `handshakeErrors` entry: its code, and metadata fields of the types the SDK maps.
+fn handshake_error(error: &Value) -> Result<Code, String> {
+    let code = field(
+        error,
+        "handshakeErrors",
+        "properties/code/const",
+        Value::as_str,
+    )?;
+    let doc = error["properties"]["code"]["description"]
+        .as_str()
+        .unwrap_or_default();
+    let metadata = &error["properties"]["metadata"];
+    let required = metadata["required"].as_array().cloned().unwrap_or_default();
+    let properties = metadata["properties"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+
+    let fields = properties
+        .iter()
+        .map(|(key, schema)| {
+            let ty = metadata_type(schema).ok_or(format!(
+                "handshakeErrors {code} has metadata.{key} of a type the SDK doesn't map yet"
+            ))?;
+            let ty = if required.iter().any(|name| name == key) {
+                ty
+            } else {
+                quote!(Option<#ty>)
+            };
+            Ok((key.clone(), format_ident!("{}", snake_case(key)), ty))
+        })
+        .collect::<Result<_, String>>()?;
+
+    new_code(code.to_owned(), "HANDSHAKE_", doc.to_owned(), fields)
+}
+
+/// `HANDSHAKE_SOURCE_ID_IN_USE` → `SourceIdInUse`, without `prefix`.
+fn new_code(
+    code: String,
+    prefix: &str,
+    doc: String,
+    fields: Vec<(String, syn::Ident, TokenStream)>,
+) -> Result<Code, String> {
+    let name = pascal(
+        &code
+            .strip_prefix(prefix)
+            .unwrap_or(&code)
+            .to_ascii_lowercase(),
+    );
+    if name.is_empty() || name == "Other" {
+        return Err(format!("{code} can't name a variant"));
+    }
+
+    Ok(Code {
+        variant: format_ident!("{name}"),
+        code,
+        doc,
+        fields,
+    })
+}
+
+/// The Rust type of a metadata field, for the JSON types every binding has.
+fn metadata_type(schema: &Value) -> Option<TokenStream> {
+    Some(match schema["type"].as_str()? {
+        "string" => quote!(String),
+        "integer" => quote!(i64),
+        "number" => quote!(f64),
+        "boolean" => quote!(bool),
+        "array" => {
+            let item = metadata_type(&schema["items"])?;
+            quote!(Vec<#item>)
+        }
+        _ => return None,
+    })
+}
+
+/// An enum of `codes` read from a code and its metadata, with `Other` for codes newer than this SDK.
+fn code_enum(name: &str, doc: &str, codes: &[Code]) -> TokenStream {
+    let name = format_ident!("{name}");
+    let variants = codes.iter().map(|code| {
+        let (doc, variant) = (&code.doc, &code.variant);
+        let fields = code.fields.iter().map(|(_, field, ty)| quote!(#field: #ty));
+        if code.fields.is_empty() {
+            quote!(#[doc = #doc] #variant)
+        } else {
+            quote!(#[doc = #doc] #variant { #(#fields),* })
+        }
+    });
+    let reads = codes.iter().map(|code| {
+        let (literal, variant) = (&code.code, &code.variant);
+        let fields = code
+            .fields
+            .iter()
+            .map(|(key, field, _)| quote!(#field: field(metadata, #key)));
+        if code.fields.is_empty() {
+            quote!(#literal => Self::#variant)
+        } else {
+            quote!(#literal => Self::#variant { #(#fields),* })
+        }
+    });
+    let literals = codes.iter().map(|code| {
+        let (literal, variant) = (&code.code, &code.variant);
+        quote!(Self::#variant { .. } => #literal)
+    });
+
+    quote! {
+        #[doc = #doc]
+        #[derive(Clone, Debug, PartialEq, ::uniffi::Enum)]
+        pub enum #name {
+            #( #variants, )*
+            /// A code this SDK doesn't know, from a newer Simlink.
+            Other { code: String },
+        }
+
+        impl #name {
+            /// Reads `code`. Metadata Simlink left out or malformed reads as empty.
+            pub(crate) fn read(code: &str, metadata: &::serde_json::Value) -> Self {
+                fn field<T: ::serde::de::DeserializeOwned + Default>(
+                    metadata: &::serde_json::Value,
+                    key: &str,
+                ) -> T {
+                    metadata
+                        .get(key)
+                        .and_then(|value| ::serde_json::from_value(value.clone()).ok())
+                        .unwrap_or_default()
+                }
+
+                match code {
+                    #( #reads, )*
+                    code => Self::Other { code: code.to_owned() },
+                }
+            }
+
+        }
+
+        #[::uniffi::export]
+        impl #name {
+            /// The code as Simlink sends it.
+            pub fn wire_code(&self) -> String {
+                match self {
+                    #( #literals, )*
+                    Self::Other { code } => code,
+                }
+                .to_owned()
+            }
+        }
     }
 }
 
@@ -522,6 +772,18 @@ fn pascal(name: &str) -> String {
 /// `telemetry.ownship` → `telemetry_ownship`.
 fn snake(name: &str) -> String {
     words(name).collect::<Vec<_>>().join("_")
+}
+
+/// `sourceId` → `source_id`.
+fn snake_case(name: &str) -> String {
+    let mut snake = String::new();
+    for c in name.chars() {
+        if c.is_ascii_uppercase() && !snake.is_empty() {
+            snake.push('_');
+        }
+        snake.push(c.to_ascii_lowercase());
+    }
+    snake
 }
 
 #[cfg(test)]
