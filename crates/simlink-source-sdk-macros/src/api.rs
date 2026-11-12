@@ -107,6 +107,7 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
 
         /// Event channels a source can declare.
         #[derive(Clone, Copy, Debug, PartialEq, Eq, ::uniffi::Enum)]
+        #[non_exhaustive]
         pub enum Event {
             #( #variants, )*
         }

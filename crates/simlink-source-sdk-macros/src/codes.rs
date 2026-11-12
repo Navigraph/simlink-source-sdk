@@ -38,6 +38,7 @@ pub fn generate(manifest: &Manifest) -> TokenStream {
 
         /// An event or command, as Simlink names it in a rejection.
         #[derive(Clone, Debug, PartialEq, Eq, ::uniffi::Enum)]
+        #[non_exhaustive]
         pub enum Channel {
             #( #variants, )*
             /// A channel this SDK doesn't know, from a newer Simlink.
@@ -108,6 +109,7 @@ fn code_enum(name: &str, doc: &str, codes: &[Code]) -> TokenStream {
     quote! {
         #[doc = #doc]
         #[derive(Clone, Debug, PartialEq, ::uniffi::Enum)]
+        #[non_exhaustive]
         pub enum #name {
             #( #variants, )*
             /// A code this SDK doesn't know, from a newer Simlink.

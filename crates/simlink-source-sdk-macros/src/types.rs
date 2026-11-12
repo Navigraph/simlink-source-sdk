@@ -122,9 +122,11 @@ impl Schemas {
                 syn::Item::Struct(item) => item
                     .attrs
                     .push(syn::parse_quote!(#[derive(::uniffi::Record)])),
-                syn::Item::Enum(item) => item
-                    .attrs
-                    .push(syn::parse_quote!(#[derive(::uniffi::Enum)])),
+                // Manifest updates add variants, which must not break integrators' matches.
+                syn::Item::Enum(item) => item.attrs.extend([
+                    syn::parse_quote!(#[derive(::uniffi::Enum)]),
+                    syn::parse_quote!(#[non_exhaustive]),
+                ]),
                 _ => {}
             }
         }
