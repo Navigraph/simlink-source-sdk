@@ -12,6 +12,20 @@ How to build, test and release the SDK. For how the code fits together, see [arc
 `cargo test` only needs Rust. The first `cargo xtask build` also installs the UniFFI generators into
 `target/tools`, which takes a few minutes; later builds reuse them.
 
+### Docker
+
+The `Dockerfile` has everything above for Linux, at the versions CI uses. Prefix any command with
+`docker compose run --rm dev`:
+
+```sh
+docker compose run --rm dev cargo xtask examples
+```
+
+The repository is mounted into the container, while its `target` folder, the Cargo registry and NuGet packages live in
+Docker volumes, so Linux builds don't mix with the host's and later runs reuse them. It builds and tests Linux only;
+CI still builds and tests on Windows and macOS, and releases are built there. `docker compose down -v` deletes the
+volumes.
+
 ## Commands
 
 ```sh
@@ -27,7 +41,8 @@ Run one example against a real Simlink with `cargo run -p simlink-source-sdk --e
 connect.
 
 CI (`.github/workflows/ci.yml`) runs the tests and the examples on Windows, Linux and macOS, the snippet check on
-Linux, and a check on the oldest supported Rust (see [MSRV](#msrv)).
+Linux, and a check on the oldest supported Rust (see [MSRV](#msrv)). `docker.yml` runs the tests and examples in the
+Docker image whenever something it installs changes.
 
 ## Common changes
 
@@ -70,14 +85,14 @@ The tools a release is built with are pinned, so the same commit builds the same
 | --- | --- |
 | GitHub Actions | commit hashes in `.github/workflows` |
 | Rust | `rust-toolchain.toml` |
-| .NET SDK | `global.json` |
+| .NET SDK | `global.json`, which the `Dockerfile` installs too |
 | CI runners, MSVC toolset | `runs-on` and the `Pin the MSVC toolset` step in `.github/workflows` |
 | Oldest macOS supported | `MACOSX_DEPLOYMENT_TARGET` in `.cargo/config.toml` |
 | UniFFI generators | `xtask/src/generators.rs` |
 
 The runner images set the oldest Linux and Windows a release runs on: glibc from Ubuntu 24.04, and the MSVC runtime
 from the toolset. Windows runners update Visual Studio within a toolset, so its minor version isn't pinned; a new
-toolset fails the build until the step is updated.
+toolset fails the build until the step is updated. The `Dockerfile` follows the Linux runner's Ubuntu version.
 
 ## Testing
 

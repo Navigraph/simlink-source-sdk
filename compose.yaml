@@ -1,0 +1,15 @@
+# docker compose run --rm dev cargo xtask examples
+services:
+  dev:
+    build: .
+    volumes:
+      - .:/work
+      # Linux build output, kept apart from the host's.
+      - target:/work/target
+      - cargo-registry:/usr/local/cargo/registry
+      - nuget:/root/.nuget/packages
+
+volumes:
+  target:
+  cargo-registry:
+  nuget:
