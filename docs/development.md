@@ -79,7 +79,9 @@ invalidates CI's cache of the installed generators.
 
 ### Updating pinned tools
 
-The tools a release is built with are pinned, so the same commit builds the same output.
+The tools a release is built with are pinned, so the same commit builds the same output. Renovate updates the
+first three; the rest are bumped by hand, since each sets the oldest OS a release runs on or targets one UniFFI
+version.
 
 | What | Where |
 | --- | --- |
