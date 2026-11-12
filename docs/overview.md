@@ -120,8 +120,8 @@ fork.
 
 ### What we own
 
-- The Rust core (`crates/simlink-source-sdk`): about 1,300 lines, including our own small Socket.IO client, since no
-  Rust client answers server-initiated acks
+- The Rust core (`crates/simlink-source-sdk`): about 800 lines
+- Our own Socket.IO client (`crates/socket-io`), since no Rust client answers server-initiated acks
 - The `protocol!` macro (`crates/simlink-source-sdk-macros`): turns the schema into the Rust API
 - `xtask`: builds, packages and tests everything
 - The examples in each language, and the README
