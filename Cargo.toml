@@ -11,6 +11,7 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 simlink-source-sdk-macros = { path = "crates/simlink-source-sdk-macros" }
+socket-io = { path = "crates/socket-io" }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }

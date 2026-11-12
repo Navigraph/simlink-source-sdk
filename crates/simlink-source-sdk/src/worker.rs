@@ -1,23 +1,25 @@
 //! The SDK's thread: finds Simlink, joins with the source's descriptor, sends each event's latest payload at its
-//! rate limit, hands commands and rejections to the listeners, and reconnects with backoff.
+//! rate limit, and hands commands and rejections to the listeners. The Socket.IO client reconnects.
 
 use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
+use socket_io::{Client, ConnectError, DisconnectReason, Event, Frame, Options, Responder};
 
 use crate::discovery;
 use crate::protocol::{ERROR_CHANNEL, MAX_PAYLOAD_BYTES, NAMESPACE, SOCKET_IO_PATH};
-use crate::socket_io::{ConnectError, Frame, Received, Socket};
 use crate::source::Listeners;
 use crate::{ConnectionState, Error};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(10);
+// Short, since every candidate address is tried in turn.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// An event channel a source can emit.
 #[derive(Debug)]
@@ -29,19 +31,14 @@ pub struct EventInfo {
 
 enum Op {
     Emit(&'static EventInfo, Frame),
-    Reply {
-        connection: u64,
-        ack: u64,
-        result: Value,
-    },
+    Reply { responder: Responder, result: Value },
     Stop,
 }
 
 /// Answers one command. Dropping it unanswered lets the command time out.
 pub struct Reply {
     ops: Sender<Op>,
-    connection: u64,
-    ack: u64,
+    responder: Responder,
 }
 
 impl Reply {
@@ -57,8 +54,7 @@ impl Reply {
     fn send(self, result: Value) {
         // The source was dropped; nothing is listening.
         let _ = self.ops.send(Op::Reply {
-            connection: self.connection,
-            ack: self.ack,
+            responder: self.responder,
             result,
         });
     }
@@ -95,7 +91,12 @@ impl Worker {
 
     /// Queues the latest payload for `event`. Sent at most at the event's rate limit; dropped while disconnected.
     pub fn emit(&self, event: &'static EventInfo, payload: &Value) -> Result<(), Error> {
-        let frame = Frame::event(NAMESPACE, event.name, payload);
+        let frame =
+            Frame::event(NAMESPACE, event.name, vec![payload.clone()]).map_err(|error| {
+                Error::InvalidArgument {
+                    message: error.to_string(),
+                }
+            })?;
         // Refused here because Simlink would drop the connection instead.
         if frame.size() > MAX_PAYLOAD_BYTES {
             return Err(Error::InvalidArgument {
@@ -129,11 +130,6 @@ impl Drop for Worker {
     }
 }
 
-enum Exit {
-    Stop,
-    Lost(String),
-}
-
 /// What the SDK thread owns.
 struct Thread {
     descriptor: Value,
@@ -146,33 +142,125 @@ struct Thread {
 
 impl Thread {
     fn run(self) {
-        let mut backoff = MIN_BACKOFF;
-        // Numbers each joined socket, so replies to an earlier one are dropped.
-        let mut connection = 0;
+        let address = self.address.clone();
+        let mut client = Client::new(
+            move || candidates(address.as_deref()),
+            NAMESPACE,
+            self.descriptor.as_object().cloned(),
+            Options {
+                path: SOCKET_IO_PATH.into(),
+                reconnection_delay: MIN_BACKOFF,
+                reconnection_delay_max: MAX_BACKOFF,
+                timeout: HANDSHAKE_TIMEOUT,
+                ..Options::default()
+            },
+        );
+        self.listeners.state(ConnectionState::Searching);
+
+        // Latest frame per event, sent no faster than the event's rate limit.
+        let mut pending: HashMap<&'static str, (&'static EventInfo, Frame)> = HashMap::new();
+        let mut last_sent: HashMap<&'static str, Instant> = HashMap::new();
+        // When to rejoin after Simlink ends the source, and the next backoff.
+        let mut rejoin_at: Option<Instant> = None;
+        let mut rejoin_backoff = MIN_BACKOFF;
+        let mut connected_at = None;
 
         loop {
-            self.listeners.state(ConnectionState::Searching);
+            loop {
+                match self.ops.try_recv() {
+                    Ok(Op::Emit(event, frame)) => {
+                        pending.insert(event.name, (event, frame));
+                    }
+                    Ok(Op::Reply { responder, result }) => {
+                        // Ack ids start over with each connection, so a stale reply could answer another command,
+                        // and Simlink closes a connection that acks before joining.
+                        if client.connected() && client.is_current(&responder) {
+                            client.ack(responder, vec![result]);
+                        } else {
+                            log::debug!("Dropping a reply to a command from an earlier connection");
+                        }
+                    }
+                    Ok(Op::Stop) | Err(TryRecvError::Disconnected) => {
+                        client.close();
+                        return;
+                    }
+                    Err(TryRecvError::Empty) => break,
+                }
+            }
 
-            let Some(joined) = self.join() else { return };
-            match joined {
-                Ok((address, socket)) => {
-                    connection += 1;
+            let now = Instant::now();
+            let mut wait = POLL_INTERVAL;
+
+            if !client.connected() {
+                pending.clear();
+            } else if client.writable() {
+                let mut due = Vec::new();
+                for (name, (event, _)) in &pending {
+                    let due_at = match (event.max_rate_hz, last_sent.get(name)) {
+                        (Some(rate), Some(sent)) => *sent + Duration::from_secs_f64(1.0 / rate),
+                        _ => now,
+                    };
+                    if due_at > now {
+                        wait = wait.min(due_at - now);
+                    } else {
+                        due.push(*name);
+                    }
+                }
+                for name in due {
+                    // Sending can fill the socket, so later events wait for the next pass.
+                    if !client.writable() {
+                        break;
+                    }
+                    if let Some((_, frame)) = pending.remove(name) {
+                        client.emit(frame);
+                        last_sent.insert(name, now);
+                    }
+                }
+            }
+
+            if let Some(at) = rejoin_at {
+                if at <= now {
+                    rejoin_at = None;
+                    self.listeners.state(ConnectionState::Searching);
+                    client.join();
+                } else {
+                    wait = wait.min(at - now);
+                }
+            }
+
+            let Some(event) = client.poll(wait) else {
+                continue;
+            };
+            match event {
+                Event::Connect { address } => {
                     log::info!("Connected to Simlink at {address}");
+                    connected_at = Some(Instant::now());
                     self.listeners.state(ConnectionState::Connected {
                         address: address.to_string(),
                     });
-
-                    let joined_at = Instant::now();
-                    match self.serve(socket, connection) {
-                        Exit::Stop => return,
-                        Exit::Lost(reason) => log::warn!("Lost Simlink: {reason}"),
+                }
+                Event::Disconnect(reason) => {
+                    // Also reported for a connection that closed before Simlink accepted the source.
+                    match connected_at.take() {
+                        Some(at) => {
+                            log::warn!("Lost Simlink: {reason}");
+                            self.listeners.state(ConnectionState::Searching);
+                            // A Simlink that drops the source straight after joining keeps backing off.
+                            if at.elapsed() >= MAX_BACKOFF {
+                                rejoin_backoff = MIN_BACKOFF;
+                            }
+                        }
+                        None => log::debug!(
+                            "Simlink closed the connection before accepting the source: {reason}"
+                        ),
                     }
-                    // A Simlink that drops the source straight after joining keeps backing off.
-                    if joined_at.elapsed() >= MAX_BACKOFF {
-                        backoff = MIN_BACKOFF;
+                    // The client rejoins after every other reason.
+                    if reason == DisconnectReason::ServerDisconnect {
+                        rejoin_at = Some(Instant::now() + rejoin_backoff);
+                        rejoin_backoff = (rejoin_backoff * 2).min(MAX_BACKOFF);
                     }
                 }
-                Err(ConnectError::Refused { message, data }) => {
+                Event::ConnectError(ConnectError::Refused { message, data }) => {
                     let code = data
                         .as_ref()
                         .and_then(|data| data.get("code"))
@@ -189,157 +277,35 @@ impl Thread {
                     });
 
                     if permanent {
-                        self.wait_for_stop(None);
+                        client.close();
+                        self.wait_for_stop();
                         return;
                     }
+                    rejoin_at = Some(Instant::now() + rejoin_backoff);
+                    rejoin_backoff = (rejoin_backoff * 2).min(MAX_BACKOFF);
                 }
-                Err(ConnectError::Unreachable(reason)) => {
+                Event::ConnectError(ConnectError::Transport(reason)) => {
                     log::debug!("Simlink not found: {reason}")
                 }
-            }
-
-            if self.wait_for_stop(Some(backoff)) {
-                return;
-            }
-            backoff = (backoff * 2).min(MAX_BACKOFF);
-        }
-    }
-
-    /// The first instance that answers, or `None` once the source is dropped.
-    fn join(&self) -> Option<Result<(SocketAddr, Socket), ConnectError>> {
-        let stopped = std::cell::Cell::new(false);
-        let try_all = |addresses: Vec<SocketAddr>| {
-            for address in addresses {
-                // Probing every candidate can take seconds, which would hold up dropping the source.
-                if self.stop_requested() {
-                    stopped.set(true);
-                    return None;
+                // A Socket.IO v2 server answers this way; it sends no pings, so the heartbeat drops it.
+                Event::ConnectError(ConnectError::UnsupportedServer) => {
+                    log::warn!("Not a Simlink: the server answered without a session id")
                 }
-                match Socket::connect(address, SOCKET_IO_PATH, NAMESPACE, &self.descriptor) {
-                    Ok(socket) => return Some(Ok((address, socket))),
-                    Err(refused @ ConnectError::Refused { .. }) => return Some(Err(refused)),
-                    Err(ConnectError::Unreachable(reason)) => log::trace!("{reason}"),
-                }
-            }
-            None
-        };
-
-        let found = match &self.address {
-            Some(address) => match address.to_socket_addrs() {
-                Ok(resolved) => try_all(resolved.collect()),
-                Err(error) => {
-                    return Some(Err(ConnectError::Unreachable(format!(
-                        "{address}: {error}"
-                    ))));
-                }
-            },
-            // mDNS is only browsed when no instance answers on this machine.
-            None => try_all(discovery::loopback_candidates()).or_else(|| {
-                if stopped.get() {
-                    None
-                } else {
-                    try_all(discovery::browse_mdns())
-                }
-            }),
-        };
-
-        if stopped.get() {
-            return None;
-        }
-        Some(found.unwrap_or_else(|| {
-            Err(ConnectError::Unreachable(
-                "no Simlink instance answered".into(),
-            ))
-        }))
-    }
-
-    /// Whether the source was dropped. Emits and replies queued meanwhile are dropped, as while disconnected.
-    fn stop_requested(&self) -> bool {
-        loop {
-            match self.ops.try_recv() {
-                Ok(Op::Stop) | Err(TryRecvError::Disconnected) => return true,
-                Ok(_) => {}
-                Err(TryRecvError::Empty) => return false,
+                Event::Message { name, args, ack } => self.dispatch(name, args, ack),
             }
         }
     }
 
-    fn serve(&self, mut socket: Socket, connection: u64) -> Exit {
-        // Latest frame per event, sent no faster than the event's rate limit.
-        let mut pending: HashMap<&'static str, (&'static EventInfo, Frame)> = HashMap::new();
-        let mut last_sent: HashMap<&'static str, Instant> = HashMap::new();
-
-        loop {
-            loop {
-                match self.ops.try_recv() {
-                    Ok(Op::Emit(event, frame)) => {
-                        pending.insert(event.name, (event, frame));
-                    }
-                    Ok(Op::Reply {
-                        connection: target,
-                        ack,
-                        result,
-                    }) if target == connection => {
-                        if let Err(reason) = socket.ack(ack, &result) {
-                            return Exit::Lost(reason);
-                        }
-                    }
-                    Ok(Op::Reply { .. }) => {}
-                    Ok(Op::Stop) | Err(TryRecvError::Disconnected) => {
-                        socket.close();
-                        return Exit::Stop;
-                    }
-                    Err(TryRecvError::Empty) => break,
-                }
-            }
-
-            let now = Instant::now();
-            let mut wait = POLL_INTERVAL;
-
-            pending.retain(|name, (event, frame)| {
-                // Held back, the latest payload replaces older ones instead of queueing behind them.
-                if socket.backlogged() {
-                    return true;
-                }
-                let due = match (event.max_rate_hz, last_sent.get(name)) {
-                    (Some(rate), Some(sent)) => *sent + Duration::from_secs_f64(1.0 / rate),
-                    _ => now,
-                };
-
-                if due > now {
-                    wait = wait.min(due - now);
-                    return true;
-                }
-
-                // A failed send surfaces as a lost connection on the next poll.
-                let _ = socket.send(frame);
-                last_sent.insert(name, now);
-                false
-            });
-
-            match socket.poll(wait) {
-                Received::Event { name, args, ack } => self.dispatch(name, args, ack, connection),
-                Received::Idle => {}
-                Received::Lost(reason) => return Exit::Lost(reason),
-            }
-        }
-    }
-
-    fn dispatch(&self, name: String, mut args: Vec<Value>, ack: Option<u64>, connection: u64) {
-        let payload = if args.is_empty() {
-            Value::Null
-        } else {
-            args.swap_remove(0)
-        };
+    fn dispatch(&self, name: String, args: Vec<Value>, ack: Option<Responder>) {
+        let payload = args.into_iter().next().unwrap_or(Value::Null);
 
         if name == ERROR_CHANNEL {
             log::warn!("Simlink rejected data: {payload}");
             self.listeners.rejected(&payload);
-        } else if let Some(ack) = ack {
+        } else if let Some(responder) = ack {
             let reply = Reply {
                 ops: self.replies.clone(),
-                connection,
-                ack,
+                responder,
             };
             self.listeners.command(&name, payload, reply);
         } else {
@@ -347,23 +313,31 @@ impl Thread {
         }
     }
 
-    /// Sleeps for `duration`, or until stopped when `None`. Emits and replies are dropped meanwhile.
-    fn wait_for_stop(&self, duration: Option<Duration>) -> bool {
-        let deadline = duration.map(|duration| Instant::now() + duration);
-
-        loop {
-            let received = match deadline {
-                Some(deadline) => self
-                    .ops
-                    .recv_timeout(deadline.saturating_duration_since(Instant::now())),
-                None => self.ops.recv().map_err(|_| RecvTimeoutError::Disconnected),
-            };
-
-            match received {
-                Ok(Op::Stop) | Err(RecvTimeoutError::Disconnected) => return true,
-                Ok(_) => {}
-                Err(RecvTimeoutError::Timeout) => return false,
+    /// Blocks until the source is dropped. Emits and replies are dropped meanwhile.
+    fn wait_for_stop(&self) {
+        while let Ok(op) = self.ops.recv() {
+            if let Op::Stop = op {
+                return;
             }
         }
+    }
+}
+
+/// Where to look for Simlink on each attempt: `address` when set, otherwise this machine's ports, then mDNS.
+fn candidates(address: Option<&str>) -> Box<dyn Iterator<Item = SocketAddr>> {
+    match address {
+        Some(address) => match address.to_socket_addrs() {
+            Ok(resolved) => Box::new(resolved),
+            Err(error) => {
+                log::debug!("{address}: {error}");
+                Box::new(std::iter::empty())
+            }
+        },
+        // Lazy, so mDNS is only browsed once no local port answers.
+        None => Box::new(
+            std::iter::once_with(discovery::loopback_candidates)
+                .flatten()
+                .chain(std::iter::once_with(discovery::browse_mdns).flatten()),
+        ),
     }
 }

@@ -1168,6 +1168,7 @@ dependencies = [
  "serde_json",
  "simlink-source-sdk",
  "simlink-source-sdk-macros",
+ "socket-io",
  "tungstenite",
  "uniffi",
 ]
@@ -1201,6 +1202,15 @@ name = "smawk"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8e2fb0f499abb4d162f2bedad68f5ef91a1682b5a03596ddb67efd37768d100"
+
+[[package]]
+name = "socket-io"
+version = "1.0.0-rc1"
+dependencies = [
+ "log",
+ "serde_json",
+ "tungstenite",
+]
 
 [[package]]
 name = "socket-pktinfo"

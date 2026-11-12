@@ -381,8 +381,10 @@ fn answers_pings_and_notices_a_silent_simlink() {
 fn leaves_when_dropped() {
     let server = Server::start();
     let source = source(&server, vec![]);
+    let states = states(&source);
     source.start().unwrap();
-    server.wait_for_join(WAIT).expect("the source joins");
+    // A source still waiting for Simlink's answer has nothing to leave.
+    wait_for_state(&states, connected);
 
     drop(source);
     assert!(
@@ -402,9 +404,9 @@ fn drops_promptly_while_searching() {
 
     let started = Instant::now();
     drop(source);
-    // At most one probe or the mDNS browse is still running.
+    // At most the loopback probes, the mDNS browse and probing what it found are still running.
     assert!(
-        started.elapsed() < Duration::from_secs(3),
+        started.elapsed() < Duration::from_secs(4),
         "dropping took {:?}",
         started.elapsed()
     );
@@ -430,6 +432,28 @@ fn retries_a_refusal_that_can_clear() {
     server
         .wait_for_join(WAIT)
         .expect("the source joins on its next attempt");
+}
+
+#[test]
+fn drops_emits_while_disconnected() {
+    let server = Server::start();
+    server.refuse_next_join(refusal("HANDSHAKE_SOURCE_ID_IN_USE"));
+    let source = source(&server, vec![Event::TelemetryOwnship]);
+    let states = states(&source);
+    source.start().unwrap();
+
+    wait_for_state(&states, rejected);
+    source.emit_telemetry_ownship(ownship(1.0)).unwrap();
+    wait_for_state(&states, connected);
+    assert!(
+        server
+            .wait_for_event("telemetry.ownship", Duration::from_millis(300))
+            .is_none(),
+        "an emit from while the source was refused arrived after it joined"
+    );
+
+    let event = emit_until_received(&source, &server, 2.0);
+    assert_eq!(event["aircraft"]["position"]["latitude"], 2.0);
 }
 
 #[test]

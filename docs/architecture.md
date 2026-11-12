@@ -9,13 +9,13 @@ How the SDK is put together, from the protocol manifest to the C++ and C# packag
 protocol/source-schema.json        Simlink's source manifest, synced from the Simlink repository
 crates/
   simlink-source-sdk-macros/       protocol!(): the manifest as Rust types and Source methods
+  socket-io/                       the Socket.IO client: one namespace, JSON, reconnection
   simlink-source-sdk/
     src/
       lib.rs                       UniFFI setup; expands protocol!()
       source.rs                    Source, its lifecycle, errors, listeners
       worker.rs                    the SDK thread: join, emit, answer, reconnect
       discovery.rs                 loopback port probing and mDNS
-      socket_io/                   a minimal Socket.IO client
       logging.rs                   `log` records to a foreign listener
     tests/                         schema, connection and example tests, and a fake Simlink
     examples/                      Rust examples
@@ -89,10 +89,13 @@ Each started source runs one thread (`worker.rs`, named `simlink-source`). The p
 a channel, so emitting never blocks on the network.
 
 - **Finding Simlink.** It probes Simlink's default port and the next few on loopback first, then browses mDNS for
-  instances on other machines that advertise a matching protocol major. It connects to the first that accepts the handshake.
-- **Reconnecting.** On a lost connection or no answer, it waits with exponential backoff from 1 to 10 seconds. A
-  connection that lasted at least the maximum backoff resets it. A `HANDSHAKE_IDENTIFICATION_INVALID` refusal stops
-  the source, since retrying would fail the same way.
+  instances on other machines that advertise a matching protocol major. Addresses that don't take a quick TCP connect are
+  skipped, so a closed port or stale record doesn't cost a full handshake timeout. It joins through the first that
+  accepts the handshake.
+- **Reconnecting.** The Socket.IO client reconnects on its own, with backoff from 1 to 10 seconds. A refusal or a
+  server disconnect ends the namespace, so the thread joins again after its own backoff over the same range, which
+  starts over once a connection has lasted 10 seconds. A `HANDSHAKE_IDENTIFICATION_INVALID` refusal stops the source,
+  since retrying would fail the same way.
 - **Emitting.** Only the latest payload per event is kept and sent no faster than the event's rate limit, so a
   source can emit every frame without flooding Simlink. While the socket is backlogged, newer payloads replace
   queued ones. Payloads over Simlink's message limit are refused up front, since
@@ -105,14 +108,36 @@ a channel, so emitting never blocks on the network.
 
 ### The Socket.IO client
 
-`socket_io/` is a minimal Socket.IO v5 client over Engine.IO v4, websocket transport only, joined to one namespace.
+`crates/socket-io` is a Socket.IO v5 client over Engine.IO v4, websocket transport only, joined to one namespace.
 It's ours because no Rust client answers server-initiated acks, which is how Simlink sends commands. It knows nothing
-about Simlink; the core passes it the path, namespace and handshake payload.
+about Simlink; the core passes it the path, namespace, handshake payload and addresses to try.
+
+It follows the [Socket.IO](https://github.com/socketio/socket.io-protocol) and
+[Engine.IO](https://github.com/socketio/engine.io-protocol) specs, and the reference client, socket.io-client, where
+they leave behavior open, as with reconnection. Every frame a server can send is either decoded or closes the
+connection, so a server can't put the client in a state it doesn't know.
+
+Not implemented, since Simlink doesn't need it:
+
+- **HTTP long-polling**, and so upgrades. Sessions are websocket from the start, which the Engine.IO spec allows.
+- **TLS** (`wss://`), query parameters and extra headers.
+- **More than one namespace** per connection. Packets for other namespaces are ignored.
+- **Acks for events the client sends.** Events go out like the reference client's volatile ones, so a backlogged
+  connection drops them.
+- **Sending binary.** Binary packets from the server are validated and dropped.
+- **Connection state recovery**, which Simlink doesn't enable.
+- **Older servers.** A Socket.IO v2 server's connect answer is reported as unsupported.
+
+`Client` runs on the caller's thread: `poll` reads, answers pings, opens and reconnects one step at a time, so the
+SDK thread stays responsive.
 
 - After the websocket upgrade the socket is non-blocking and polled, since Windows sockets are unreliable once a
   read times out.
-- Engine.IO pings are answered inside `poll`, and a server that stops pinging counts as lost.
-- Loopback connects time out quickly, since Windows takes about 2 s to refuse a closed port.
+- A server that sends no ping within `pingInterval + pingTimeout` counts as lost, whatever else it sends.
+- Acks are sent over the current connection, even for an event from an earlier one, as the reference client does.
+  `Client::is_current` tells the caller which, since ack ids start over with each connection.
+- `tests/protocol.rs` ports the official protocol test suites to the client's side, and `tests/client.rs` checks the
+  reference client's behavior.
 
 ### Foreign code
 

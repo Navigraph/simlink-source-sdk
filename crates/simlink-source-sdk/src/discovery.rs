@@ -1,6 +1,6 @@
 //! Finds Simlink instances: loopback ports first, then mDNS for instances on other machines.
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
 
 use mdns_sd::{ServiceDaemon, ServiceEvent};
@@ -8,15 +8,44 @@ use mdns_sd::{ServiceDaemon, ServiceEvent};
 use crate::protocol::{DEFAULT_PORT, MDNS_SERVICE_TYPE, PORT_PROBE_LIMIT, PROTOCOL_VERSION};
 
 const BROWSE_WINDOW: Duration = Duration::from_millis(1500);
+// The client tries addresses in turn, each with one timeout for its connect and handshake, so dead ones are probed out
+// first. Windows takes about 2 s to refuse a closed loopback port but accepts an open one at once; an mDNS record can
+// be stale or not route.
+const LOOPBACK_PROBE_TIMEOUT: Duration = Duration::from_millis(250);
+const REMOTE_PROBE_TIMEOUT: Duration = Duration::from_secs(1);
 
-/// The ports Simlink may bind on this machine, in the order it tries them.
+/// The ports Simlink may bind on this machine that accept a connection, in the order it tries them.
 pub fn loopback_candidates() -> Vec<SocketAddr> {
-    (0..PORT_PROBE_LIMIT)
+    let ports = (0..PORT_PROBE_LIMIT)
         .map(|offset| SocketAddr::new(Ipv4Addr::LOCALHOST.into(), DEFAULT_PORT + offset))
-        .collect()
+        .collect();
+    reachable(ports, LOOPBACK_PROBE_TIMEOUT)
 }
 
-/// Simlink instances advertised over mDNS with a matching protocol major.
+/// The `addresses` that accept a connection within `timeout`, in order. Probed in parallel.
+fn reachable(addresses: Vec<SocketAddr>, timeout: Duration) -> Vec<SocketAddr> {
+    std::thread::scope(|scope| {
+        let probes: Vec<_> = addresses
+            .iter()
+            .map(|address| {
+                std::thread::Builder::new().spawn_scoped(scope, move || {
+                    TcpStream::connect_timeout(address, timeout).is_ok()
+                })
+            })
+            .collect();
+        addresses
+            .iter()
+            .zip(probes)
+            .filter_map(|(address, probe)| match probe {
+                Ok(probe) => probe.join().unwrap_or(false).then_some(*address),
+                // Left for the Socket.IO client to try.
+                Err(_) => Some(*address),
+            })
+            .collect()
+    })
+}
+
+/// Simlink instances advertised over mDNS with a matching protocol major, at addresses that accept a connection.
 pub fn browse_mdns() -> Vec<SocketAddr> {
     let daemon = match ServiceDaemon::new() {
         Ok(daemon) => daemon,
@@ -52,17 +81,19 @@ pub fn browse_mdns() -> Vec<SocketAddr> {
                 .collect();
             addresses.sort_by_key(|address| (!address.is_loopback(), address.is_ipv6()));
 
-            found.extend(
-                addresses
-                    .into_iter()
-                    .map(|address| SocketAddr::new(address, service.port)),
-            );
+            // mdns-sd resolves a service again on each interface and update.
+            for address in addresses {
+                let address = SocketAddr::new(address, service.port);
+                if !found.contains(&address) {
+                    found.push(address);
+                }
+            }
         }
     }
 
     let _ = daemon.shutdown();
 
-    found
+    reachable(found, REMOTE_PROBE_TIMEOUT)
 }
 
 /// Simlink lists every protocol major it serves, comma-separated, while it migrates between them.
