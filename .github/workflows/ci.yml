@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, ubuntu-24.04, macos-15]
+        os: [windows-2025, ubuntu-26.04, macos-15]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -48,7 +48,7 @@ jobs:
 
   # rust-toolchain.toml pins what we develop with; this checks the oldest Rust that `rust-version` promises.
   msrv:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

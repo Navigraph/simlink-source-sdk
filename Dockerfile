@@ -1,8 +1,8 @@
-# Linux build and test environment, matching the ubuntu-24.04 CI job. See docs/development.md.
-FROM ubuntu:24.04
+# Linux build and test environment, matching the ubuntu-26.04 CI job. See docs/development.md.
+FROM ubuntu:26.04
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential ca-certificates cmake curl git libicu74 \
+    && apt-get install -y --no-install-recommends build-essential ca-certificates cmake curl git libicu78 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:/usr/share/dotnet:$PATH \
