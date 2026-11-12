@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use super::library::Library;
 use super::{Archive, VERSION};
 use crate::examples::{self, EXAMPLES, dotnet, pascal};
-use crate::{executable, run};
+use crate::{bindings, executable, run};
 
 /// Lets the examples restore the package from the archive's own folder.
 const NUGET_CONFIG: &str = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -44,12 +44,15 @@ fn add_runtime(library: &Library) -> Result<()> {
 
 /// Packs the libraries in `runtimes`, or only this platform's without it, and tests the examples against the package.
 pub fn package(runtimes: Option<&Path>) -> Result<()> {
-    // Also generates the C# bindings the package compiles.
-    let library = Library::build()?;
     let runtimes = match runtimes {
-        Some(runtimes) => runtimes,
+        Some(runtimes) => {
+            // The libraries are prebuilt; the package still compiles the C# bindings.
+            bindings::build()?;
+            runtimes
+        }
         None => {
-            add_runtime(&library)?;
+            // Also generates the bindings.
+            runtime()?;
             Path::new(RUNTIMES)
         }
     };
