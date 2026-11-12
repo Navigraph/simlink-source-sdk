@@ -329,9 +329,6 @@ fn check_keys(manifest: &Value) -> Result<(), String> {
             "socketIo",
             "namespace",
             "errorChannel",
-            // Ignored: how Simlink names its own mDNS advertisement, which discovery finds by service type.
-            "mdnsInstanceName",
-            "mdnsHostname",
             // Ignored: an HTTP header Node clients may send the descriptor in instead of the auth payload.
             "authHeader",
         ],
