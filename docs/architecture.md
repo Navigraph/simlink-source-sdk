@@ -67,9 +67,9 @@ Before handing schemas to typify, the macro strips what Simlink validates anyway
 defaults, and `const` properties with a default). Otherwise typify would turn them into validating newtypes or fields
 integrators must fill in. Channel descriptions and deprecations carry over as doc comments and `#[deprecated]`.
 
-The macro fails the build when the manifest has something the SDK doesn't handle: a channel that doesn't originate
-from the source, a missing field the core reads by name, or handshake error metadata that isn't a string, number,
-boolean or array of them. `include_bytes!` on the manifest rebuilds the crate
+The macro fails the build when the manifest has something the SDK doesn't handle: a key it neither reads nor ignores
+on purpose (`check_keys` lists the ignored ones and why), a channel that doesn't originate from the source, a missing
+field the core reads by name, or handshake error metadata that isn't a string, number, boolean or array of them. `include_bytes!` on the manifest rebuilds the crate
 whenever it changes.
 
 ## The core

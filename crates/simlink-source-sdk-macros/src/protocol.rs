@@ -152,6 +152,7 @@ impl Protocol {
     }
 
     fn load(&mut self, manifest: &mut Value) -> Result<(), String> {
+        check_keys(manifest)?;
         self.load_descriptor(&mut manifest["descriptor"])?;
 
         let errors = manifest["handshakeErrors"]["oneOf"]
@@ -547,6 +548,134 @@ impl Protocol {
     }
 }
 
+/// Fails on any manifest key the SDK neither reads nor ignores on purpose, so a sync can't add something the SDK
+/// silently skips. Schemas the macro hands to typify are left out: their types follow the manifest.
+fn check_keys(manifest: &Value) -> Result<(), String> {
+    known_keys(
+        manifest,
+        "manifest",
+        &[
+            "connection",
+            "descriptor",
+            "handshakeErrors",
+            "errorFrame",
+            "events",
+            "commands",
+        ],
+    )?;
+    let connection = &manifest["connection"];
+    known_keys(
+        connection,
+        "connection",
+        &[
+            "protocolVersion",
+            "defaultPort",
+            "portProbeLimit",
+            "mdnsServiceType",
+            "mdnsTxt",
+            "socketIo",
+            "namespace",
+            "errorChannel",
+            // Ignored: how Simlink names its own mDNS advertisement, which discovery finds by service type.
+            "mdnsInstanceName",
+            "mdnsHostname",
+            // Ignored: an HTTP header Node clients may send the descriptor in instead of the auth payload.
+            "authHeader",
+        ],
+    )?;
+    known_keys(
+        &connection["socketIo"],
+        "connection.socketIo",
+        &[
+            "path",
+            "maxPayloadBytes",
+            // Ignored: the client takes these from the Engine.IO open packet.
+            "pingIntervalMs",
+            "pingTimeoutMs",
+        ],
+    )?;
+    known_keys(
+        &connection["mdnsTxt"]["properties"],
+        "connection.mdnsTxt.properties",
+        &[
+            "protocol", // Ignored: informational.
+            "version",
+        ],
+    )?;
+
+    for error in manifest["handshakeErrors"]["oneOf"]
+        .as_array()
+        .ok_or("handshakeErrors.oneOf is missing")?
+    {
+        known_keys(
+            &error["properties"],
+            "handshakeErrors.oneOf.properties",
+            &["code", "metadata"],
+        )?;
+    }
+    let frame = &manifest["errorFrame"]["properties"];
+    known_keys(
+        frame,
+        "errorFrame.properties",
+        &["event", "code", "message", "issues"],
+    )?;
+    known_keys(
+        &frame["issues"]["items"]["properties"],
+        "errorFrame.properties.issues.items.properties",
+        &["code", "message", "path"],
+    )?;
+
+    for (name, entry) in object(&manifest["events"], "events")? {
+        known_keys(
+            entry,
+            &format!("events.{name}"),
+            &[
+                "origin",
+                "description",
+                "deprecated",
+                "maxRateHz",
+                "payload",
+            ],
+        )?;
+    }
+    for (name, entry) in object(&manifest["commands"], "commands")? {
+        known_keys(
+            entry,
+            &format!("commands.{name}"),
+            &[
+                "origin",
+                "description",
+                "deprecated",
+                "timeoutMs",
+                "input",
+                "output",
+                "errors",
+                // Ignored: the reply envelope, which the SDK writes and the tests check replies against.
+                "result",
+            ],
+        )?;
+    }
+
+    Ok(())
+}
+
+fn object<'a>(value: &'a Value, at: &str) -> Result<&'a Map<String, Value>, String> {
+    value.as_object().ok_or(format!("{at} is missing"))
+}
+
+fn known_keys(value: &Value, at: &str, known: &[&str]) -> Result<(), String> {
+    match object(value, at)?
+        .keys()
+        .find(|key| !known.contains(&key.as_str()))
+    {
+        Some(key) => Err(format!(
+            "the manifest has {at}.{key}, which the SDK doesn't handle yet; read it in the macro, or add it to the \
+             keys ignored on purpose in check_keys"
+        )),
+        None => Ok(()),
+    }
+}
+
 /// A `handshakeErrors` entry: its code, and metadata fields of the types the SDK maps.
 fn handshake_error(error: &Value) -> Result<Code, String> {
     let code = field(
@@ -791,6 +920,25 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn rejects_manifest_keys_the_sdk_does_not_handle() {
+        let text = include_str!("../../../protocol/source-schema.json");
+        let manifest: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(check_keys(&manifest), Ok(()));
+
+        for pointer in [
+            "",
+            "/connection",
+            "/events/telemetry.ownship",
+            "/errorFrame/properties",
+        ] {
+            let mut changed = manifest.clone();
+            changed.pointer_mut(pointer).unwrap()["unknown"] = json!(1);
+            let error = check_keys(&changed).unwrap_err();
+            assert!(error.contains(".unknown,"), "{pointer}: {error}");
+        }
+    }
 
     #[test]
     fn simplify_strips_keywords_but_keeps_properties_named_like_them() {
