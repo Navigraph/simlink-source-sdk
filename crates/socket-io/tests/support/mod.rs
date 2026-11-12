@@ -167,6 +167,7 @@ pub fn client(
         auth,
         options,
     )
+    .unwrap()
 }
 
 /// The next event, failing after a few seconds without one.

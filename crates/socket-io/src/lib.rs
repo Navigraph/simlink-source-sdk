@@ -9,11 +9,13 @@
 //! The client joins one namespace, sends events without acks, answers the server's acks, and drops binary packets.
 //! Where the protocols leave behavior open, reconnection included, it follows the reference client, socket.io-client.
 //!
-//! Everything runs on the caller's thread inside [`Client::poll`].
+//! Everything runs on the caller's thread inside [`Client::poll`], which sleeps until the socket, a deadline or a
+//! [`Waker`] needs it.
 
 mod backoff;
 mod client;
 mod engine;
+mod waker;
 mod wire;
 
 use std::net::SocketAddr;
@@ -21,7 +23,8 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-pub use client::Client;
+pub use client::{Addresses, Client};
+pub use waker::Waker;
 
 /// How a [`Client`] connects and reconnects. Defaults match the reference client.
 #[derive(Clone, Debug)]

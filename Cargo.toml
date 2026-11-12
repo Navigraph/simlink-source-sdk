@@ -17,6 +17,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 jsonschema = { version = "0.61", default-features = false }
 log = "0.4"
+polling = "3"
 mdns-sd = "0.21"
 proc-macro2 = "1"
 quote = "1"

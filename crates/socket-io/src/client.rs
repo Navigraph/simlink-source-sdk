@@ -3,21 +3,23 @@
 
 use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
 
 use crate::backoff::Backoff;
-use crate::engine::{Connection, READ_RETRY, Read};
+use crate::engine::{Connection, Read};
+use crate::waker::{Signal, Waker};
 use crate::wire::{self, Inbound};
 use crate::{ConnectError, DisconnectReason, Event, Frame, Options, Responder};
 
-/// Called on every attempt. Addresses are pulled lazily, only as far as needed.
-type Addresses = Box<dyn FnMut() -> Box<dyn Iterator<Item = SocketAddr>>>;
+/// Where to look on each attempt, pulled lazily, only as far as needed.
+pub type Addresses = Box<dyn Iterator<Item = SocketAddr> + Send>;
 
 /// A Socket.IO client joined to one namespace.
 pub struct Client {
-    addresses: Addresses,
+    addresses: Box<dyn FnMut() -> Addresses + Send>,
     options: Options,
     namespace: String,
     auth: Option<Map<String, Value>>,
@@ -37,13 +39,14 @@ pub struct Client {
     /// transport until the next attempt replaces it.
     was_writable: bool,
     events: VecDeque<Event>,
+    signal: Arc<Signal>,
 }
 
 enum State {
     Idle,
     /// Finding the next address and opening it are separate steps, since either can block.
     Opening {
-        candidates: Option<Box<dyn Iterator<Item = SocketAddr>>>,
+        candidates: Option<Addresses>,
         next: Option<SocketAddr>,
         error: Option<String>,
         /// Acks, sent once a connection opens. Reference: engine.io-client's `writeBuffer`.
@@ -57,15 +60,15 @@ enum State {
 
 impl Client {
     /// Joins `namespace` (`/` or e.g. `/admin`) with `auth` at the first of `addresses` that opens a session.
-    /// Connects on the first [`Client::poll`].
+    /// Connects on the first [`Client::poll`]. Fails if the OS won't create a poller.
     pub fn new(
-        addresses: impl FnMut() -> Box<dyn Iterator<Item = SocketAddr>> + 'static,
+        addresses: impl FnMut() -> Addresses + Send + 'static,
         namespace: &str,
         auth: Option<Map<String, Value>>,
         options: Options,
-    ) -> Client {
+    ) -> std::io::Result<Client> {
         let backoff = Backoff::new(options.reconnection_delay, options.reconnection_delay_max);
-        Client {
+        Ok(Client {
             addresses: Box::new(addresses),
             options,
             namespace: namespace.to_owned(),
@@ -84,7 +87,13 @@ impl Client {
             sent_early: Vec::new(),
             was_writable: false,
             events: VecDeque::new(),
-        }
+            signal: Signal::new()?,
+        })
+    }
+
+    /// Wakes [`Client::poll`] from another thread.
+    pub fn waker(&self) -> Waker {
+        Waker(self.signal.clone())
     }
 
     /// Rejoins after the server refused or disconnected the namespace, or after a lost connection without
@@ -146,8 +155,10 @@ impl Client {
         matches!(&self.state, State::Open(connection) if connection.writable())
     }
 
-    /// Runs the client for up to `wait` and returns the next event. Can overrun `wait` by however long the address
-    /// iterator takes to yield, by one address's timeout, or by up to 500 ms closing on a server that isn't reading.
+    /// Runs the client for up to `wait` and returns the next event, sleeping while there's nothing to do. Returns
+    /// `None` early when a [`Waker`] fires or a backlogged connection becomes [`writable`](Client::writable) again.
+    /// Can overrun `wait` by however long the address iterator takes to yield, by one address's timeout, or by up to
+    /// 500 ms closing on a server that isn't reading.
     pub fn poll(&mut self, wait: Duration) -> Option<Event> {
         // Overflow means no deadline.
         let deadline = Instant::now().checked_add(wait);
@@ -156,17 +167,31 @@ impl Client {
             if let Some(event) = self.events.pop_front() {
                 return Some(event);
             }
+            if self.signal.take_woken() {
+                return None;
+            }
 
+            let backlogged =
+                matches!(&self.state, State::Open(connection) if !connection.writable());
             let idle = self.step();
 
             if !self.events.is_empty() {
                 continue;
             }
+            if backlogged && self.writable() {
+                return None;
+            }
             if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
                 return None;
             }
             if idle {
-                std::thread::sleep(READ_RETRY);
+                match &self.state {
+                    State::Open(connection) => connection.wait(deadline),
+                    State::Waiting { until } => self.signal.wait(Some(
+                        deadline.map_or(*until, |deadline| deadline.min(*until)),
+                    )),
+                    _ => self.signal.wait(deadline),
+                }
             }
         }
     }
@@ -233,7 +258,12 @@ impl Client {
         };
 
         if let Some(address) = next.take() {
-            match Connection::open(address, &self.options.path, self.options.timeout) {
+            match Connection::open(
+                address,
+                &self.options.path,
+                self.options.timeout,
+                &self.signal,
+            ) {
                 Ok(connection) => {
                     let acks = std::mem::take(acks);
                     self.on_open(connection, acks);

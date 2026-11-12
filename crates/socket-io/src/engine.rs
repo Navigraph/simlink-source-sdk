@@ -3,20 +3,23 @@
 
 use std::io::ErrorKind;
 use std::net::{SocketAddr, TcpStream};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use polling::Event as Interest;
 use tungstenite::error::ProtocolError;
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
 use crate::DisconnectReason;
+use crate::waker::Signal;
 use crate::wire::{self, Decoder, Engine, Inbound};
 
 const CLOSE_TIMEOUT: Duration = Duration::from_millis(500);
 // The default of Node's `ws`, which the reference client uses.
 const MAX_MESSAGE_SIZE: usize = 100 << 20;
-// Responsive without keeping a sim's CPU awake.
-pub const READ_RETRY: Duration = Duration::from_millis(5);
+/// The socket's key in the poller.
+const SOCKET: usize = 0;
 
 pub enum Read {
     Nothing,
@@ -37,11 +40,18 @@ pub struct Connection {
     backlogged: bool,
     /// Reported once what the server sent before it has been read.
     write_error: Option<DisconnectReason>,
+    /// The socket is registered with its poller until the connection drops.
+    signal: Arc<Signal>,
 }
 
 impl Connection {
     /// `timeout` runs from connecting to the open packet, like the reference `Manager`'s `timeout`.
-    pub fn open(address: SocketAddr, path: &str, timeout: Duration) -> Result<Connection, String> {
+    pub fn open(
+        address: SocketAddr,
+        path: &str,
+        timeout: Duration,
+        signal: &Arc<Signal>,
+    ) -> Result<Connection, String> {
         // Overflow means no deadline.
         let deadline = Instant::now().checked_add(timeout);
         let remaining = || match deadline {
@@ -67,44 +77,72 @@ impl Connection {
         let config = WebSocketConfig::default()
             .max_message_size(Some(MAX_MESSAGE_SIZE))
             .max_frame_size(None);
-        let (mut socket, _) =
+        let (socket, _) =
             tungstenite::client::client_with_config(url.as_str(), stream, Some(config))
                 .map_err(text)?;
-        // Windows sockets are unreliable after a read times out, so go nonblocking from here.
+        // Windows sockets are unreliable after a read times out, so go nonblocking and wait on readiness from here.
         socket.get_ref().set_nonblocking(true).map_err(text)?;
+        // SAFETY: `Drop` deletes the registration before the socket closes.
+        unsafe {
+            signal
+                .poller
+                .add(socket.get_ref(), Interest::readable(SOCKET))
+        }
+        .map_err(text)?;
+        let mut connection = Connection {
+            address,
+            socket,
+            decoder: Decoder::default(),
+            heartbeat: Duration::ZERO,
+            alive_until: Instant::now(),
+            backlogged: false,
+            write_error: None,
+            signal: signal.clone(),
+        };
 
-        let heartbeat = loop {
+        loop {
             // Checked every iteration, so a silent or pinging server can't hold the attempt open.
             if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
                 return Err("no Engine.IO open packet".into());
             }
-            match socket.read() {
+            match connection.socket.read() {
                 Ok(Message::Text(frame)) => match wire::decode_engine(&frame) {
                     Ok(Engine::Open {
                         ping_interval,
                         ping_timeout,
-                    }) => break ping_interval + ping_timeout,
+                    }) => {
+                        connection.heartbeat = ping_interval + ping_timeout;
+                        connection.alive_until = Instant::now() + connection.heartbeat;
+                        return Ok(connection);
+                    }
                     _ => return Err("no Engine.IO open packet".into()),
                 },
                 // Tungstenite answers these, as `ws` does.
                 Ok(Message::Ping(_) | Message::Pong(_)) => {}
                 Ok(_) => return Err("no Engine.IO open packet".into()),
                 Err(tungstenite::Error::Io(e)) if e.kind() == ErrorKind::WouldBlock => {
-                    std::thread::sleep(READ_RETRY);
+                    connection.wait_for(Interest::readable(SOCKET), deadline);
                 }
                 Err(e) => return Err(e.to_string()),
             }
-        };
+        }
+    }
 
-        Ok(Connection {
-            address,
-            socket,
-            decoder: Decoder::default(),
-            heartbeat,
-            alive_until: Instant::now() + heartbeat,
-            backlogged: false,
-            write_error: None,
-        })
+    /// Blocks until the socket has something to read, or room to write while backlogged, a [`Waker`] fires, the ping
+    /// deadline passes, or `until`.
+    ///
+    /// [`Waker`]: crate::Waker
+    pub fn wait(&self, until: Option<Instant>) {
+        let until = until.map_or(self.alive_until, |until| until.min(self.alive_until));
+        self.wait_for(Interest::new(SOCKET, true, self.backlogged), Some(until));
+    }
+
+    fn wait_for(&self, interest: Interest, until: Option<Instant>) {
+        // The poller reports each readiness once, so it's asked for again before every wait.
+        if let Err(error) = self.signal.poller.modify(self.socket.get_ref(), interest) {
+            log::warn!("Waiting on the socket failed: {error}");
+        }
+        self.signal.wait(until);
     }
 
     /// The server went `pingInterval + pingTimeout` without a ping.
@@ -185,7 +223,7 @@ impl Connection {
         while Instant::now() < deadline {
             match self.socket.flush() {
                 Err(tungstenite::Error::Io(e)) if e.kind() == ErrorKind::WouldBlock => {
-                    std::thread::sleep(READ_RETRY)
+                    self.wait_for(Interest::writable(SOCKET), Some(deadline))
                 }
                 _ => return,
             }
@@ -205,6 +243,12 @@ impl Connection {
             Err(e) => self.write_error = Some(lost(e)),
             Ok(()) => {}
         }
+    }
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        let _ = self.signal.poller.delete(self.socket.get_ref());
     }
 }
 

@@ -93,7 +93,8 @@ never drops.
 ### The worker thread
 
 Each started source runs one thread (`worker.rs`, named `simlink-source`). The public API only sends it messages over
-a channel, so emitting never blocks on the network.
+a channel and wakes it, so emitting never blocks on the network. Otherwise the thread sleeps until the socket needs it
+or an emit or rejoin is due.
 
 - **Finding Simlink.** It probes Simlink's default port and the next few on loopback first, then browses mDNS for
   instances on other machines that advertise a matching protocol major. Addresses that don't take a quick TCP connect are
@@ -138,8 +139,10 @@ Not implemented, since Simlink doesn't need it:
 `Client` runs on the caller's thread: `poll` reads, answers pings, opens and reconnects one step at a time, so the
 SDK thread stays responsive.
 
-- After the websocket upgrade the socket is non-blocking and polled, since Windows sockets are unreliable once a
-  read times out.
+- After the websocket upgrade the socket is non-blocking, since Windows sockets are unreliable once a read times out.
+  Between steps, `poll` sleeps on the OS's readiness API (epoll, kqueue or IOCP, through the `polling` crate) until
+  the socket is ready, a deadline such as the ping timeout or backoff passes, or another thread calls its `Waker`.
+  An idle source doesn't wake up.
 - A server that sends no ping within `pingInterval + pingTimeout` counts as lost, whatever else it sends.
 - Acks are sent over the current connection, even for an event from an earlier one, as the reference client does.
   `Client::is_current` tells the caller which, since ack ids start over with each connection.

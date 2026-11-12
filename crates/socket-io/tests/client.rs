@@ -46,7 +46,8 @@ mod manager {
             NS,
             None,
             fast(),
-        );
+        )
+        .unwrap();
         assert!(matches!(
             next(&mut client),
             Event::ConnectError(ConnectError::Transport(_))
@@ -91,7 +92,8 @@ mod manager {
                 reconnection_delay_max: Duration::from_secs(5),
                 ..Options::default()
             },
-        );
+        )
+        .unwrap();
         for _ in 0..4 {
             assert!(matches!(
                 next(&mut client),
@@ -135,7 +137,8 @@ mod manager {
                 reconnection_delay_max: Duration::from_secs(5),
                 ..Options::default()
             },
-        );
+        )
+        .unwrap();
         for _ in 0..3 {
             assert!(matches!(
                 next(&mut client),
@@ -187,7 +190,8 @@ mod manager {
                 reconnection_delay_max: Duration::from_secs(5),
                 ..Options::default()
             },
-        );
+        )
+        .unwrap();
         for _ in 0..3 {
             assert!(matches!(
                 next(&mut client),
@@ -234,7 +238,8 @@ mod manager {
                 timeout: Duration::from_millis(200),
                 ..once()
             },
-        );
+        )
+        .unwrap();
         assert_connect(next(&mut client), address);
         assert!(
             started.elapsed() < Duration::from_secs(1),
@@ -270,7 +275,8 @@ mod manager {
                 timeout: Duration::from_millis(200),
                 ..once()
             },
-        );
+        )
+        .unwrap();
         assert_connect(next(&mut client), address);
         assert!(
             started.elapsed() < Duration::from_secs(1),
@@ -309,7 +315,8 @@ mod manager {
             NS,
             None,
             once(),
-        );
+        )
+        .unwrap();
         assert_connect(next(&mut client), address);
         server.join().unwrap();
     }
@@ -623,7 +630,8 @@ mod socket {
             NS,
             None,
             fast(),
-        );
+        )
+        .unwrap();
         assert_connect(next(&mut client), address);
         let Event::Message {
             ack: Some(responder),
@@ -669,6 +677,89 @@ mod socket {
         while !matches!(next(&mut client), Event::Connect { .. }) {}
         assert!(!client.is_current(&responder));
         client.ack(responder, vec![]);
+        finish(client, server);
+    }
+}
+
+/// The client sleeps between socket activity, so these check what has to wake it. This client only.
+mod waiting {
+    use super::*;
+
+    #[test]
+    fn wakes_for_a_frame() {
+        let (address, server) = serve(|mut listener| {
+            let mut peer = listener.accept();
+            peer.accept("40/custom,");
+            std::thread::sleep(Duration::from_millis(200));
+            peer.send(r#"42/custom,["late"]"#);
+            peer.close();
+        });
+
+        let mut client = joined(address, NS, None);
+        let polled = Instant::now();
+        assert_message(
+            client.poll(Duration::MAX).expect("an event"),
+            "late",
+            vec![],
+        );
+        assert!(
+            polled.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            polled.elapsed()
+        );
+        finish(client, server);
+    }
+
+    #[test]
+    fn wakes_for_the_ping_deadline() {
+        let (address, server) = serve(|mut listener| {
+            let mut peer = listener.accept();
+            peer.accept_after(SHORT_HEARTBEAT, "40/custom,");
+            peer.wait_closed();
+        });
+
+        let mut client = joined(address, NS, None);
+        let polled = Instant::now();
+        assert_disconnect(
+            client.poll(Duration::MAX).expect("an event"),
+            DisconnectReason::PingTimeout,
+        );
+        // pingInterval + pingTimeout is 500 ms.
+        assert!(
+            polled.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            polled.elapsed()
+        );
+        drop(client);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn wakes_for_a_waker() {
+        let (closing, closed) = std::sync::mpsc::channel();
+        let (address, server) = serve(move |mut listener| {
+            let mut peer = listener.accept();
+            peer.accept("40/custom,");
+            closed.recv().unwrap();
+            peer.close();
+        });
+
+        let mut client = joined(address, NS, None);
+        let waker = client.waker();
+        let polled = Instant::now();
+        let woken = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            waker.wake();
+        });
+        assert!(client.poll(Duration::MAX).is_none());
+        assert!(
+            polled.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            polled.elapsed()
+        );
+        woken.join().unwrap();
+
+        closing.send(()).unwrap();
         finish(client, server);
     }
 }

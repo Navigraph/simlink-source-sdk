@@ -2,20 +2,21 @@
 //! rate limit, and hands commands and rejections to the listeners. The Socket.IO client reconnects.
 
 use std::collections::HashMap;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::ToSocketAddrs;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use socket_io::{Client, ConnectError, DisconnectReason, Event, Frame, Options, Responder};
+use socket_io::{
+    Addresses, Client, ConnectError, DisconnectReason, Event, Frame, Options, Responder, Waker,
+};
 
 use crate::discovery;
 use crate::protocol::{ERROR_CHANNEL, MAX_PAYLOAD_BYTES, NAMESPACE, SOCKET_IO_PATH};
 use crate::source::Listeners;
 use crate::{ConnectionState, Error, HandshakeError};
 
-const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(10);
 // Short, since every candidate address is tried in turn.
@@ -35,9 +36,24 @@ enum Op {
     Stop,
 }
 
+/// Sends to the SDK thread and wakes it.
+#[derive(Clone)]
+struct Ops {
+    sender: Sender<Op>,
+    waker: Waker,
+}
+
+impl Ops {
+    fn send(&self, op: Op) {
+        // Fails only once the thread has exited, when nothing is listening.
+        let _ = self.sender.send(op);
+        self.waker.wake();
+    }
+}
+
 /// Answers one command. Dropping it unanswered lets the command time out.
 pub struct Reply {
-    ops: Sender<Op>,
+    ops: Ops,
     responder: Responder,
 }
 
@@ -52,8 +68,7 @@ impl Reply {
     }
 
     fn send(self, result: Value) {
-        // The source was dropped; nothing is listening.
-        let _ = self.ops.send(Op::Reply {
+        self.ops.send(Op::Reply {
             responder: self.responder,
             result,
         });
@@ -62,7 +77,7 @@ impl Reply {
 
 /// The running SDK thread. Dropping it disconnects.
 pub struct Worker {
-    ops: Sender<Op>,
+    ops: Ops,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -70,17 +85,32 @@ impl Worker {
     /// Joins with `descriptor`, a `SourceDescriptor` in Simlink's handshake format, at `address` or wherever
     /// discovery finds Simlink.
     pub fn start(descriptor: Value, address: Option<String>, listeners: Listeners) -> Worker {
-        let (ops, receiver) = mpsc::channel();
+        let client = Client::new(
+            move || candidates(address.as_deref()),
+            NAMESPACE,
+            descriptor.as_object().cloned(),
+            Options {
+                path: SOCKET_IO_PATH.into(),
+                reconnection_delay: MIN_BACKOFF,
+                reconnection_delay_max: MAX_BACKOFF,
+                timeout: HANDSHAKE_TIMEOUT,
+                ..Options::default()
+            },
+        )
+        .expect("the OS refused the SDK a poller");
+        let (sender, receiver) = mpsc::channel();
+        let ops = Ops {
+            sender,
+            waker: client.waker(),
+        };
         let thread = Thread {
-            descriptor,
-            address,
             listeners,
             ops: receiver,
             replies: ops.clone(),
         };
         let thread = std::thread::Builder::new()
             .name("simlink-source".into())
-            .spawn(move || thread.run())
+            .spawn(move || thread.run(client))
             .expect("the OS refused to start the SDK thread");
 
         Worker {
@@ -108,8 +138,7 @@ impl Worker {
             });
         }
 
-        // The thread only exits after drop.
-        let _ = self.ops.send(Op::Emit(event, frame));
+        self.ops.send(Op::Emit(event, frame));
 
         Ok(())
     }
@@ -117,7 +146,7 @@ impl Worker {
 
 impl Drop for Worker {
     fn drop(&mut self) {
-        let _ = self.ops.send(Op::Stop);
+        self.ops.send(Op::Stop);
 
         // Dropped from a listener callback: the thread exits once it returns.
         if let Some(thread) = self
@@ -132,29 +161,13 @@ impl Drop for Worker {
 
 /// What the SDK thread owns.
 struct Thread {
-    descriptor: Value,
-    /// Replaces discovery when set.
-    address: Option<String>,
     listeners: Listeners,
     ops: Receiver<Op>,
-    replies: Sender<Op>,
+    replies: Ops,
 }
 
 impl Thread {
-    fn run(self) {
-        let address = self.address.clone();
-        let mut client = Client::new(
-            move || candidates(address.as_deref()),
-            NAMESPACE,
-            self.descriptor.as_object().cloned(),
-            Options {
-                path: SOCKET_IO_PATH.into(),
-                reconnection_delay: MIN_BACKOFF,
-                reconnection_delay_max: MAX_BACKOFF,
-                timeout: HANDSHAKE_TIMEOUT,
-                ..Options::default()
-            },
-        );
+    fn run(self, mut client: Client) {
         self.listeners.state(ConnectionState::Searching);
 
         // Latest frame per event, sent no faster than the event's rate limit.
@@ -189,7 +202,8 @@ impl Thread {
             }
 
             let now = Instant::now();
-            let mut wait = POLL_INTERVAL;
+            // Until the next due emit or rejoin; ops, socket activity and a drained backlog wake it sooner.
+            let mut wait = Duration::MAX;
 
             if !client.connected() {
                 pending.clear();
@@ -326,7 +340,7 @@ impl Thread {
 }
 
 /// Where to look for Simlink on each attempt: `address` when set, otherwise this machine's ports, then mDNS.
-fn candidates(address: Option<&str>) -> Box<dyn Iterator<Item = SocketAddr>> {
+fn candidates(address: Option<&str>) -> Addresses {
     match address {
         Some(address) => match address.to_socket_addrs() {
             Ok(resolved) => Box::new(resolved),
