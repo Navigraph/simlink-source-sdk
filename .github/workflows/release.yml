@@ -40,6 +40,14 @@ jobs:
           echo "CMAKE_GENERATOR=Visual Studio 18 2026" >> "$GITHUB_ENV"
           echo "CMAKE_GENERATOR_TOOLSET=v145" >> "$GITHUB_ENV"
 
+      # Builds the Linux library against an older glibc than the runner's.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        if: runner.os == 'Linux'
+        with:
+          version: 0.17.1
+      - run: cargo install --locked cargo-zigbuild --version 0.24.1
+        if: runner.os == 'Linux'
+
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           global-json-file: global.json

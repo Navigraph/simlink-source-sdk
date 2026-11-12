@@ -19,7 +19,16 @@ traffic around it, and the commands it answers, such as ATIS and flight plan loo
 machine or the network, joins, reconnects whenever Simlink restarts, and sends each event no faster than its rate
 limit, latest payload first.
 
-It runs on x64 Windows and Linux, and on macOS (Apple silicon and Intel), from C++, C# and Rust.
+## Requirements
+
+| | Minimum |
+| --- | --- |
+| Windows | Windows 10 or Server 2016, x64 |
+| Linux | x64 with glibc 2.17 or newer |
+| macOS | 10.12 or newer on Intel, 11 or newer on Apple silicon |
+| C++ | A C++20 compiler, and CMake 3.20 or newer for the CMake project |
+| C# | .NET 6 or newer, or .NET Framework 4.7.2 or newer |
+| Rust | 1.95 or newer |
 
 ## Installing
 

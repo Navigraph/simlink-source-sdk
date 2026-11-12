@@ -87,11 +87,14 @@ version.
 | .NET SDK | `global.json`, which the `Dockerfile` installs too |
 | CI runners, MSVC toolset | `runs-on` and the `Pin the MSVC toolset` step in `.github/workflows` |
 | Oldest macOS supported | `MACOSX_DEPLOYMENT_TARGET` in `.cargo/config.toml` |
+| Oldest glibc supported | `GLIBC` in `xtask/src/package/library.rs` |
+| Linux release tools: zig, cargo-zigbuild | `.github/workflows/release.yml` |
 | UniFFI generators | `xtask/src/generators.rs` |
 
-The runner images set the oldest Linux and Windows a release runs on: glibc from Ubuntu 24.04, and the MSVC runtime
-from the toolset. Windows runners update Visual Studio within a toolset, so its minor version isn't pinned; a new
-toolset fails the build until the step is updated. The `Dockerfile` follows the Linux runner's Ubuntu version.
+The macOS target and glibc version follow [Supported platforms](#supported-platforms). The Linux library is built
+against that glibc with `cargo zigbuild`. Windows releases need the MSVC runtime of the pinned
+toolset. Windows runners update Visual Studio within a toolset, so its minor version isn't pinned; a new toolset fails
+the build until the step is updated. The `Dockerfile` follows the Linux runner's Ubuntu version.
 
 ## Testing
 
@@ -121,11 +124,33 @@ is written separately from the SDK's, so one misreading of the protocol can't pa
 The connection tests point the SDK at the fake Simlink through `Source::set_address`, which only exists with the
 crate's `testing` feature. Run one test file with `cargo test -p simlink-source-sdk --test source`.
 
+## Supported platforms
+
+The SDK supports every OS that Rust supports at the [MSRV](#msrv), and nothing older, since Rust's standard library
+can't run there. A higher floor would only shut users out.
+
+| Platform | Minimum | Set by |
+| --- | --- | --- |
+| Windows | Windows 10 or Server 2016 | Rust itself |
+| Linux | glibc 2.17 | `GLIBC` in `xtask/src/package/library.rs` |
+| macOS | 10.12 on Intel, 11 on Apple silicon | `MACOSX_DEPLOYMENT_TARGET` in `.cargo/config.toml` |
+
+The language requirements come from elsewhere:
+
+- **C++20**, because that's what `uniffi-bindgen-cpp` generates. The bindings ship as source, so users compile them
+  with their own compiler.
+- **C#**: the package targets .NET Standard 2.0.
+- **Rust**: the MSRV.
+
+When the MSRV moves, check [Rust's platform support](https://doc.rust-lang.org/rustc/platform-support.html) for the
+new version, and update the table above, the pins it names, and the README's requirements.
+
 ## MSRV
 
-`rust-version` in the workspace `Cargo.toml` is the oldest Rust the crates build on. It's set by what the
-dependencies need, and is separate from the toolchain pinned in `rust-toolchain.toml`. CI checks the workspace on
-that version. Cargo resolves dependencies to versions that support it, so `cargo update` keeps it where it is.
+`rust-version` in the workspace `Cargo.toml` is the oldest Rust the crates build on: the newest release that's at least
+six months old, moved forward by hand. It's separate from the toolchain pinned in `rust-toolchain.toml`, and it sets
+the oldest OS the SDK supports (see [Supported platforms](#supported-platforms)). CI checks the workspace on that
+version. Cargo resolves dependencies to versions that support it, so `cargo update` keeps it where it is.
 Bumping a dependency to a version that needs newer Rust fails the MSRV job.
 
 ## Releasing
@@ -152,5 +177,6 @@ The workflow runs in two stages:
 Each package task builds and runs the examples from its own archive, so a broken archive fails the release before it's
 published.
 
-To build a release archive locally, run the same commands. `cargo xtask package csharp` without `--runtimes` packages
-only the current platform's library.
+To build a release archive locally, run the same commands. On Linux they need zig and `cargo-zigbuild`, at the versions
+`release.yml` installs. `cargo xtask package csharp` without `--runtimes` packages only the current
+platform's library.

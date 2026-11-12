@@ -1,5 +1,6 @@
+# Rust's own minimum, pinned so a new toolchain can't change it unnoticed.
 [env]
-MACOSX_DEPLOYMENT_TARGET = "11.0"
+MACOSX_DEPLOYMENT_TARGET = "10.12"
 
 [alias]
 xtask = "run --quiet --locked --package xtask --"

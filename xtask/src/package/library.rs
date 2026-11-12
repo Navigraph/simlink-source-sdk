@@ -32,7 +32,11 @@ impl Library {
 
         Ok(match (std::env::consts::OS, std::env::consts::ARCH) {
             ("windows", "x86_64") => release("win-x64"),
-            ("linux", "x86_64") => release("linux-x64"),
+            ("linux", "x86_64") => Library {
+                rid: "linux-x64",
+                static_library: old_glibc(&static_name)?,
+                dynamic_library: old_glibc(&dynamic_name)?,
+            },
             ("macos", _) => Library {
                 rid: "osx",
                 static_library: universal(&static_name)?,
@@ -41,6 +45,21 @@ impl Library {
             (os, arch) => bail!("no release archive for {os} {arch}"),
         })
     }
+}
+
+/// The oldest glibc the Linux library runs on: Rust's own minimum.
+const GLIBC: &str = "2.17";
+
+/// Builds `library` against [`GLIBC`] with `cargo zigbuild`, rather than the runner's own.
+fn old_glibc(library: &str) -> Result<PathBuf> {
+    let target = "x86_64-unknown-linux-gnu";
+    run(cargo("zigbuild")
+        .args(["--release", "-p", "simlink-source-sdk", "--target"])
+        .arg(format!("{target}.{GLIBC}")))?;
+    Ok(Path::new("target")
+        .join(target)
+        .join("release")
+        .join(library))
 }
 
 /// Builds `library` for both macOS architectures and joins them with `lipo`.
