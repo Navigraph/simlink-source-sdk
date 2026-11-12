@@ -34,8 +34,7 @@ pub fn build() -> Result<()> {
 
 /// Installs a generator into `target/tools` on first use. Returns its executable.
 fn install(generator: &Generator) -> Result<PathBuf> {
-    let [_, pin] = generator.pin.args();
-    let dir = Path::new("target/tools").join(format!("{}-{pin}", generator.name));
+    let dir = Path::new("target/tools").join(format!("{}-{}", generator.name, generator.rev));
     let exe = dir.join("bin").join(executable(generator.name));
     if !exe.exists() {
         // Not `cargo()`: installs build in a throwaway directory, not alongside the libraries.
@@ -47,7 +46,7 @@ fn install(generator: &Generator) -> Result<PathBuf> {
                 "--git",
                 generator.repository,
             ])
-            .args(generator.pin.args())
+            .args(["--rev", generator.rev])
             .arg("--root")
             .arg(&dir)
             .env_remove("CARGO_TARGET_DIR"))?;

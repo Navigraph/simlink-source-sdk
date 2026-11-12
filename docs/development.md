@@ -7,7 +7,7 @@ How to build, test and release the SDK. For how the code fits together, see [arc
 - **Rust**, via [rustup](https://rustup.rs). `rust-toolchain.toml` pins the toolchain, and rustup installs it on first
   use.
 - **CMake** 3.20+ and a C++20 compiler, for the C++ examples. On Windows, MSVC.
-- **.NET SDK** 10, for the C# examples.
+- **.NET SDK**, the exact version in `global.json`, for the C# examples.
 
 `cargo test` only needs Rust. The first `cargo xtask build` also installs the UniFFI generators into
 `target/tools`, which takes a few minutes; later builds reuse them.
@@ -59,7 +59,25 @@ The macro fails the build on anything in the manifest the SDK doesn't support ye
 ### Updating UniFFI or a generator
 
 Each generator release targets one UniFFI minor version. Bump `uniffi` in the workspace `Cargo.toml` and both pins in
-`xtask/src/generators.rs` together. Changing that file also invalidates CI's cache of the installed generators.
+`xtask/src/generators.rs` together. Generators are pinned to commits, since tags can move. Changing that file also
+invalidates CI's cache of the installed generators.
+
+### Updating pinned tools
+
+The tools a release is built with are pinned, so the same commit builds the same output.
+
+| What | Where |
+| --- | --- |
+| GitHub Actions | commit hashes in `.github/workflows` |
+| Rust | `rust-toolchain.toml` |
+| .NET SDK | `global.json` |
+| CI runners, MSVC toolset | `runs-on` and the `Pin the MSVC toolset` step in `.github/workflows` |
+| Oldest macOS supported | `MACOSX_DEPLOYMENT_TARGET` in `.cargo/config.toml` |
+| UniFFI generators | `xtask/src/generators.rs` |
+
+The runner images set the oldest Linux and Windows a release runs on: glibc from Ubuntu 24.04, and the MSVC runtime
+from the toolset. Windows runners update Visual Studio within a toolset, so its minor version isn't pinned; a new
+toolset fails the build until the step is updated.
 
 ## Testing
 

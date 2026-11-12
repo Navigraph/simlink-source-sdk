@@ -13,24 +13,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: [windows-2025, ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # rustup installs the toolchain from rust-toolchain.toml on first use.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       # The generators take minutes to compile; xtask pins them in generators.rs.
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/tools
           key: uniffi-generators-${{ runner.os }}-${{ hashFiles('xtask/src/generators.rs') }}
 
-      - uses: actions/setup-dotnet@v6
+      # Pinned so a runner image update can't silently change the compiler. Rust links with the same Visual Studio.
+      - name: Pin the MSVC toolset
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "CMAKE_GENERATOR=Visual Studio 18 2026" >> "$GITHUB_ENV"
+          echo "CMAKE_GENERATOR_TOOLSET=v145" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - run: cargo test --workspace --locked
       # Builds every example against the bindings, then checks each one joins a test Simlink and answers it.
@@ -40,10 +48,10 @@ jobs:
 
   # rust-toolchain.toml pins what we develop with; this checks the oldest Rust that `rust-version` promises.
   msrv:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install the workspace's rust-version
         run: |
@@ -51,6 +59,6 @@ jobs:
           rustup toolchain install "$msrv" --profile minimal
           echo "MSRV=$msrv" >> "$GITHUB_ENV"
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - run: cargo +"$MSRV" check --workspace --all-targets --locked

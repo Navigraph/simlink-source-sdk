@@ -40,7 +40,7 @@ protocol/source-schema.json
 - **Bindings are generated, never checked in.** `cargo xtask build` builds the library and runs both generators in
   UniFFI's library mode, which reads the exported API from the compiled dynamic library. Because of
   this, the items `protocol!` generates get bindings like any other UniFFI item.
-- **Generators are pinned** in `xtask/src/generators.rs`, each to a release targeting the workspace's UniFFI minor
+- **Generators are pinned** in `xtask/src/generators.rs`, each to the commit of a release targeting the workspace's UniFFI minor
   version, and installed into `target/tools` on first use. C# uses [our fork](https://github.com/Navigraph/uniffi-bindgen-cs)
   until upstream merges our fixes.
 - **C++ links the static library; C# loads the dynamic one.** The crate builds `lib`, `cdylib` and `staticlib` for

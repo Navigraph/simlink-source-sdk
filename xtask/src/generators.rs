@@ -3,26 +3,12 @@
 pub struct Generator {
     pub name: &'static str,
     pub repository: &'static str,
-    /// Each generator targets one UniFFI minor version, which the workspace pins to match.
-    pub pin: Pin,
+    /// The commit `cargo install` builds. Each generator targets one UniFFI minor version, which the workspace pins
+    /// to match.
+    pub rev: &'static str,
     pub args: &'static [&'static str],
     /// Under `target/bindings`.
     pub out: &'static str,
-}
-
-/// The git ref `cargo install` builds.
-pub enum Pin {
-    Tag(&'static str),
-    Rev(&'static str),
-}
-
-impl Pin {
-    pub fn args(&self) -> [&'static str; 2] {
-        match self {
-            Pin::Tag(tag) => ["--tag", tag],
-            Pin::Rev(rev) => ["--rev", rev],
-        }
-    }
 }
 
 pub const GENERATORS: [Generator; 2] = [
@@ -31,7 +17,7 @@ pub const GENERATORS: [Generator; 2] = [
         // Our fork's main: v0.11.1+v0.31.0 plus fixes for sibling variant collisions, doc comment warnings, and IL2CPP
         // callbacks.
         repository: "https://github.com/Navigraph/uniffi-bindgen-cs",
-        pin: Pin::Rev("55b78d9df5ad36a9b50d4d1173a73b2248bf57e6"),
+        rev: "55b78d9df5ad36a9b50d4d1173a73b2248bf57e6",
         // Without `--no-format` the output depends on whether CSharpier is installed.
         args: &[
             "--config",
@@ -43,7 +29,7 @@ pub const GENERATORS: [Generator; 2] = [
     Generator {
         name: "uniffi-bindgen-cpp",
         repository: "https://github.com/NordSecurity/uniffi-bindgen-cpp",
-        pin: Pin::Tag("v0.10.0+v0.31.0"),
+        rev: "c592133cac069d4e870744c1cdf09558b148c9fc",
         // Library mode rejects `--config`; the C++ namespace defaults to the crate name.
         args: &[],
         out: "cpp",
