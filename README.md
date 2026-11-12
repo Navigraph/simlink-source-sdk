@@ -28,10 +28,11 @@ Each archive also holds the [examples](#examples), ready to build against it.
 
 ### C++
 
-`simlink-source-sdk-cpp-<version>-<platform>.zip` holds the headers in `include`, a static library in `lib` (on
-Windows, `lib/Debug` and `lib/Release`), a `CMakeLists.txt`, and on Windows a Visual Studio property sheet. You need a
-C++20 compiler; on Windows, MSVC with the dynamic runtime library (`/MD` and `/MDd`, Visual Studio's default). The
-library is static, so nothing ships alongside your program.
+`simlink-source-sdk-cpp-<version>-<platform>.zip` holds the headers in `include`, the C++ half of the bindings in
+`src`, a static library in `lib`, a `CMakeLists.txt`, and on Windows a Visual Studio property sheet. Your build compiles
+`src/simlink_source_sdk.cpp` with your own compiler and settings, so any C++20 compiler works; on Windows, MSVC with the
+dynamic runtime library (`/MD` and `/MDd`, Visual Studio's default). The library is static, so nothing ships alongside
+your program.
 
 **CMake**
 
@@ -43,11 +44,10 @@ target_link_libraries(my_app PRIVATE simlink-source-sdk::simlink-source-sdk)
 **Visual Studio project**
 
 In the Property Manager, right-click your project, choose Add Existing Property Sheet, and pick
-`simlink-source-sdk.props` from the SDK. It adds the headers and C++20, and links the Debug or Release library to
-match each configuration.
+`simlink-source-sdk.props` from the SDK. It adds the headers, C++20, `src/simlink_source_sdk.cpp` and the library.
 
-**Other build systems**: add `include` to the include path, and link the library in `lib`, plus `ntdll.lib` and
-`userenv.lib` on Windows.
+**Other build systems**: compile `src/simlink_source_sdk.cpp` as C++20, add `include` to the include path, and link
+the library in `lib`, plus `ntdll.lib` and `userenv.lib` on Windows.
 
 ### C#
 

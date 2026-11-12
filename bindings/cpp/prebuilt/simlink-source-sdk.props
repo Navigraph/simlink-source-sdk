@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Adds the SDK to a Visual Studio C++ project: Property Manager → Add Existing Property Sheet. -->
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <!-- By UseDebugLibraries rather than name, so custom configurations pick the right one. -->
-  <PropertyGroup>
-    <SimlinkSourceSdkLibraries Condition="'$(UseDebugLibraries)' == 'true'">$(MSBuildThisFileDirectory)lib\Debug</SimlinkSourceSdkLibraries>
-    <SimlinkSourceSdkLibraries Condition="'$(UseDebugLibraries)' != 'true'">$(MSBuildThisFileDirectory)lib\Release</SimlinkSourceSdkLibraries>
-  </PropertyGroup>
-
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -14,7 +8,15 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(SimlinkSourceSdkLibraries)\simlink_source_sdk.lib;ntdll.lib;userenv.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(MSBuildThisFileDirectory)lib\simlink_source_sdk.lib;ntdll.lib;userenv.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+
+  <!-- The C++ half of the bindings, compiled with the project's own settings. -->
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\simlink_source_sdk.cpp">
+      <!-- It doesn't include the project's precompiled header. -->
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
 </Project>

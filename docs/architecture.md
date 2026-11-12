@@ -157,9 +157,10 @@ on. The log listener is called from whichever thread logs.
 `cargo xtask package` builds release archives into `target/package` and tests each by building its own examples from
 the staged copy:
 
-- **C++** (`package cpp`, per platform): the generated headers, the static library with the C++ half of the
-  bindings compiled in, `bindings/cpp/prebuilt/CMakeLists.txt`, the Visual Studio property sheet on Windows, and the
-  examples. Windows ships Debug and Release libraries, since MSVC won't mix them. macOS ships one universal library.
+- **C++** (`package cpp`, per platform): the generated headers, the C++ half of the bindings as source, the static
+  Rust library, `bindings/cpp/prebuilt/CMakeLists.txt`, the Visual Studio property sheet on Windows, and the examples.
+  The user's build compiles the bindings, so they match its compiler and configuration; only the Rust library, whose
+  interface is C, is prebuilt. macOS ships one universal library.
 - **C#** (`package csharp-runtime` per platform, then `package csharp --runtimes` once): one NuGet package with
   every platform's library under `runtimes/<rid>/native`, targeting .NET Standard 2.0. `bindings/csharp/Polyfills.cs`
   supplies the compiler types the generated code needs that .NET Standard 2.0 lacks.
