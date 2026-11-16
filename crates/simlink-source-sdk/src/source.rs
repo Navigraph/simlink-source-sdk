@@ -150,6 +150,12 @@ fn issue_path(segments: &Value) -> String {
     path
 }
 
+fn to_json(value: &impl Serialize) -> Result<Value, Error> {
+    serde_json::to_value(value).map_err(|e| Error::InvalidArgument {
+        message: e.to_string(),
+    })
+}
+
 /// Runs a foreign callback. A C# or C++ exception arrives as a panic, which would end the SDK's thread.
 fn shield(what: &str, call: impl FnOnce()) {
     if catch_unwind(AssertUnwindSafe(call)).is_err() {
@@ -232,9 +238,7 @@ impl Source {
     }
 
     pub(crate) fn emit_json(&self, event: Event, payload: &impl Serialize) -> Result<(), Error> {
-        let payload = serde_json::to_value(payload).map_err(|e| Error::InvalidArgument {
-            message: e.to_string(),
-        })?;
+        let payload = to_json(payload)?;
         let info = event.info();
         match &*self.lifecycle.lock().expect("source lock") {
             Lifecycle::Running(_) if !self.events.contains(&event) => Err(Error::Undeclared {
@@ -280,17 +284,13 @@ pub(crate) struct PendingReply(Mutex<Option<Reply>>);
 
 impl PendingReply {
     pub(crate) fn ok(&self, value: &impl Serialize) -> Result<(), Error> {
-        let value = serde_json::to_value(value).map_err(|e| Error::InvalidArgument {
-            message: e.to_string(),
-        })?;
+        let value = to_json(value)?;
         self.take()?.ok(value);
         Ok(())
     }
 
     pub(crate) fn refuse(&self, error: &impl Serialize) -> Result<(), Error> {
-        let error = serde_json::to_value(error).map_err(|e| Error::InvalidArgument {
-            message: e.to_string(),
-        })?;
+        let error = to_json(error)?;
         self.take()?.refuse(error);
         Ok(())
     }
