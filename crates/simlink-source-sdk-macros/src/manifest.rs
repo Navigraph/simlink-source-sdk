@@ -4,12 +4,6 @@ use serde_json::{Map, Value};
 
 use crate::names::pascal;
 
-/// A schema typify turns into a Rust type, with the name it gets if it's an object.
-pub struct Schema {
-    pub name: Option<String>,
-    pub schema: Value,
-}
-
 pub struct Channel {
     pub name: String,
     pub doc: String,
@@ -19,15 +13,15 @@ pub struct Channel {
 pub struct Event {
     pub channel: Channel,
     pub max_rate_hz: Option<f64>,
-    pub payload: Schema,
+    pub payload: Value,
 }
 
 pub struct Command {
     pub channel: Channel,
     pub timeout_ms: u64,
-    pub input: Schema,
-    pub output: Schema,
-    pub error: Schema,
+    pub input: Value,
+    pub output: Value,
+    pub refusal: Value,
 }
 
 /// One of the codes Simlink refuses a handshake or rejects a frame with.
@@ -68,12 +62,14 @@ pub struct Connection {
 
 pub struct Manifest {
     /// `SourceOptions`: the descriptor without the capabilities, which the SDK declares.
-    pub descriptor: Schema,
+    pub descriptor: Value,
     pub events: Vec<Event>,
     pub commands: Vec<Command>,
     pub handshake_errors: Vec<Code>,
     pub rejection_codes: Vec<Code>,
     pub connection: Connection,
+    /// The types every schema above refers to by `#/$defs/<name>`.
+    pub defs: Map<String, Value>,
 }
 
 impl Manifest {
@@ -88,30 +84,50 @@ pub fn read(text: &str) -> Result<Manifest, String> {
     let manifest: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
     check_keys(&manifest)?;
 
-    let handshake_errors = manifest["handshakeErrors"]["oneOf"]
-        .as_array()
-        .ok_or("handshakeErrors.oneOf is missing")?;
-
     Ok(Manifest {
-        descriptor: descriptor(&manifest["descriptor"])?,
-        events: object(&manifest["events"], "events")?
+        descriptor: descriptor(part(&manifest, "descriptor")?)?,
+        events: channels(&manifest, "events")?
             .iter()
             .map(|(name, entry)| event(name, entry))
             .collect::<Result<_, _>>()?,
-        commands: object(&manifest["commands"], "commands")?
+        commands: channels(&manifest, "commands")?
             .iter()
             .map(|(name, entry)| command(name, entry))
             .collect::<Result<_, _>>()?,
-        handshake_errors: handshake_errors
+        handshake_errors: handshake_errors(&manifest)?
             .iter()
             .map(handshake_error)
             .collect::<Result<_, _>>()?,
-        rejection_codes: rejection_codes(&manifest["errorFrame"])?,
-        connection: connection(&manifest["connection"])?,
+        rejection_codes: rejection_codes(part(&manifest, "errorFrame")?)?,
+        connection: connection(&manifest["x-connection"])?,
+        defs: object(&manifest["$defs"], "$defs")?.clone(),
     })
 }
 
-fn descriptor(descriptor: &Value) -> Result<Schema, String> {
+/// The schema of the protocol's `key`, following its `$ref`.
+fn part<'a>(manifest: &'a Value, key: &str) -> Result<&'a Value, String> {
+    let schema = &manifest["properties"][key];
+    match schema["$ref"].as_str() {
+        None => Ok(schema),
+        Some(reference) => reference
+            .strip_prefix('#')
+            .and_then(|pointer| manifest.pointer(pointer))
+            .ok_or(format!("{key} refers to {reference}, which is missing")),
+    }
+}
+
+/// The `events` or `commands` by name.
+fn channels<'a>(manifest: &'a Value, kind: &str) -> Result<&'a Map<String, Value>, String> {
+    object(&part(manifest, kind)?["properties"], kind)
+}
+
+fn handshake_errors(manifest: &Value) -> Result<&Vec<Value>, String> {
+    part(manifest, "handshakeErrors")?["oneOf"]
+        .as_array()
+        .ok_or("handshakeErrors.oneOf is missing".into())
+}
+
+fn descriptor(descriptor: &Value) -> Result<Value, String> {
     let mut schema = descriptor.clone();
     schema["properties"]
         .as_object_mut()
@@ -121,52 +137,36 @@ fn descriptor(descriptor: &Value) -> Result<Schema, String> {
     if let Some(required) = schema["required"].as_array_mut() {
         required.retain(|name| name != "capabilities");
     }
+    schema["title"] = "SourceOptions".into();
     schema["description"] =
         "Source identity presented to Simlink. The SDK declares the capabilities.".into();
 
-    Ok(Schema {
-        name: Some("SourceOptions".into()),
-        schema,
-    })
+    Ok(schema)
 }
 
 fn event(name: &str, entry: &Value) -> Result<Event, String> {
     Ok(Event {
         channel: channel(name, entry)?,
-        max_rate_hz: entry["maxRateHz"].as_f64(),
-        payload: named_if_object(&entry["payload"], pascal(name)),
+        max_rate_hz: entry["x-max-rate-hz"].as_f64(),
+        payload: field(entry, name, "properties/payload", Some)?.clone(),
     })
 }
 
 fn command(name: &str, entry: &Value) -> Result<Command, String> {
-    let base = pascal(name);
+    let schema = |key: &str| field(entry, name, &format!("properties/{key}"), Some).cloned();
     Ok(Command {
         channel: channel(name, entry)?,
-        timeout_ms: field(entry, name, "timeoutMs", Value::as_u64)?,
-        input: Schema {
-            name: Some(format!("{base}Input")),
-            schema: entry["input"].clone(),
-        },
-        output: named_if_object(&entry["output"], format!("{base}Output")),
-        error: Schema {
-            name: Some(format!("{base}Error")),
-            schema: entry["errors"].clone(),
-        },
+        timeout_ms: field(entry, name, "x-timeout-ms", Value::as_u64)?,
+        input: schema("input")?,
+        output: schema("output")?,
+        refusal: schema("errors")?,
     })
-}
-
-/// Objects get a channel-derived name; arrays and maps stay `Vec<T>` and `HashMap<String, T>`.
-fn named_if_object(schema: &Value, name: String) -> Schema {
-    Schema {
-        name: schema.get("properties").map(|_| name),
-        schema: schema.clone(),
-    }
 }
 
 /// What the generated API needs from a channel entry. The SDK only emits and answers on behalf of a source; other
 /// channels would point the wrong way.
 fn channel(name: &str, entry: &Value) -> Result<Channel, String> {
-    match entry["origin"].as_str() {
+    match entry["x-origin"].as_str() {
         Some("source") => {}
         origin => {
             return Err(format!(
@@ -174,11 +174,8 @@ fn channel(name: &str, entry: &Value) -> Result<Channel, String> {
             ));
         }
     }
-    let deprecated = match &entry["deprecated"] {
-        Value::String(reason) => Some(reason.clone()),
-        Value::Bool(true) => Some(String::new()),
-        _ => None,
-    };
+    let reason = entry["x-deprecation"].as_str().unwrap_or_default();
+    let deprecated = (entry["deprecated"] == true).then(|| reason.to_owned());
 
     Ok(Channel {
         name: name.to_owned(),
@@ -301,14 +298,27 @@ fn connection(connection: &Value) -> Result<Connection, String> {
     })
 }
 
+/// Keywords that only make an object containing schemas a schema itself.
+const WRAPPER: &[&str] = &[
+    "$schema",
+    "title",
+    "type",
+    "required",
+    "additionalProperties",
+];
+
 /// Fails on any manifest key the SDK neither reads nor ignores on purpose, so a sync can't add something the SDK
 /// silently skips. Schemas typify turns into types are left out: their types follow the manifest.
 fn check_keys(manifest: &Value) -> Result<(), String> {
     known_keys(
         manifest,
         "manifest",
+        &[WRAPPER, &["properties", "$defs", "x-connection"]].concat(),
+    )?;
+    known_keys(
+        &manifest["properties"],
+        "manifest.properties",
         &[
-            "connection",
             "descriptor",
             "handshakeErrors",
             "errorFrame",
@@ -316,10 +326,10 @@ fn check_keys(manifest: &Value) -> Result<(), String> {
             "commands",
         ],
     )?;
-    let connection = &manifest["connection"];
+    let connection = &manifest["x-connection"];
     known_keys(
         connection,
-        "connection",
+        "x-connection",
         &[
             "protocolVersion",
             "defaultPort",
@@ -335,7 +345,7 @@ fn check_keys(manifest: &Value) -> Result<(), String> {
     )?;
     known_keys(
         &connection["socketIo"],
-        "connection.socketIo",
+        "x-connection.socketIo",
         &[
             "path",
             "maxPayloadBytes",
@@ -346,22 +356,19 @@ fn check_keys(manifest: &Value) -> Result<(), String> {
     )?;
     known_keys(
         &connection["mdnsTxt"]["properties"],
-        "connection.mdnsTxt.properties",
+        "x-connection.mdnsTxt.properties",
         // Ignored: `version`, which is informational.
         &["protocol", "version"],
     )?;
 
-    for error in manifest["handshakeErrors"]["oneOf"]
-        .as_array()
-        .ok_or("handshakeErrors.oneOf is missing")?
-    {
+    for error in handshake_errors(manifest)? {
         known_keys(
             &error["properties"],
             "handshakeErrors.oneOf.properties",
             &["code", "metadata"],
         )?;
     }
-    let frame = &manifest["errorFrame"]["properties"];
+    let frame = &part(manifest, "errorFrame")?["properties"];
     known_keys(
         frame,
         "errorFrame.properties",
@@ -373,31 +380,38 @@ fn check_keys(manifest: &Value) -> Result<(), String> {
         &["code", "message", "path"],
     )?;
 
-    for (name, entry) in object(&manifest["events"], "events")? {
+    let channel_keys = [
+        WRAPPER,
+        &[
+            "properties",
+            "description",
+            "deprecated",
+            "x-deprecation",
+            "x-origin",
+        ],
+    ]
+    .concat();
+    for (name, entry) in channels(manifest, "events")? {
+        let at = format!("events.{name}");
         known_keys(
             entry,
-            &format!("events.{name}"),
-            &[
-                "origin",
-                "description",
-                "deprecated",
-                "maxRateHz",
-                "payload",
-            ],
+            &at,
+            &[&channel_keys[..], &["x-max-rate-hz"]].concat(),
+        )?;
+        known_keys(
+            &entry["properties"],
+            &format!("{at}.properties"),
+            &["payload"],
         )?;
     }
-    for (name, entry) in object(&manifest["commands"], "commands")? {
+    for (name, entry) in channels(manifest, "commands")? {
+        let at = format!("commands.{name}");
+        known_keys(entry, &at, &[&channel_keys[..], &["x-timeout-ms"]].concat())?;
         known_keys(
-            entry,
-            &format!("commands.{name}"),
+            &entry["properties"],
+            &format!("{at}.properties"),
             &[
-                "origin",
-                "description",
-                "deprecated",
-                "timeoutMs",
-                "input",
-                "output",
-                "errors",
+                "input", "output", "errors",
                 // Ignored: the reply envelope, which the SDK writes and the tests check replies against.
                 "result",
             ],
@@ -451,9 +465,11 @@ mod tests {
 
         for pointer in [
             "",
-            "/connection",
-            "/events/telemetry.ownship",
-            "/errorFrame/properties",
+            "/properties",
+            "/x-connection",
+            "/properties/events/properties/telemetry.ownship",
+            "/properties/events/properties/telemetry.ownship/properties",
+            "/$defs/SourceErrorFrame/properties",
         ] {
             let mut changed = manifest.clone();
             changed.pointer_mut(pointer).unwrap()["unknown"] = json!(1);

@@ -84,7 +84,7 @@ impl Server {
 
     /// Listens on Simlink's default port, the first one discovery probes, so an unmodified source finds it.
     pub fn on_simlink_port() -> Result<Server, String> {
-        let port = MANIFEST["connection"]["defaultPort"].as_u64().unwrap() as u16;
+        let port = MANIFEST["x-connection"]["defaultPort"].as_u64().unwrap() as u16;
         // The previous test's connections can hold the port for a moment.
         let deadline = Instant::now() + BIND_RETRY_TIMEOUT;
         loop {
@@ -194,7 +194,7 @@ impl Server {
 
     /// Sends `payload` on the error channel, as Simlink does for invalid data.
     pub fn send_error(&self, payload: Value) {
-        let name = MANIFEST["connection"]["errorChannel"]
+        let name = MANIFEST["x-connection"]["errorChannel"]
             .as_str()
             .unwrap()
             .to_owned();
@@ -327,7 +327,9 @@ fn serve(shared: &Shared, stream: TcpStream) {
     // Like Simlink, answer only on the published Socket.IO path.
     let path = format!(
         "{}/",
-        MANIFEST["connection"]["socketIo"]["path"].as_str().unwrap()
+        MANIFEST["x-connection"]["socketIo"]["path"]
+            .as_str()
+            .unwrap()
     );
     // tungstenite's callback signature fixes the error type.
     #[allow(clippy::result_large_err)]
@@ -434,7 +436,7 @@ impl Connection<'_> {
     /// Handles one Engine.IO packet from the source. Returns `false` once the source closes the connection.
     fn receive(&mut self, text: &str) -> bool {
         // Simlink drops the connection on a larger message.
-        let limit = MANIFEST["connection"]["socketIo"]["maxPayloadBytes"]
+        let limit = MANIFEST["x-connection"]["socketIo"]["maxPayloadBytes"]
             .as_u64()
             .unwrap();
         if text.len() as u64 > limit {
@@ -459,7 +461,7 @@ impl Connection<'_> {
             }
         }
 
-        let namespace = MANIFEST["connection"]["namespace"].as_str().unwrap();
+        let namespace = MANIFEST["x-connection"]["namespace"].as_str().unwrap();
         let (kind, rest) = text[1..].split_at_checked(1).unwrap_or(("", ""));
         let Some(rest) = rest
             .strip_prefix(namespace)
@@ -551,6 +553,6 @@ impl Connection<'_> {
 fn packet(kind: char, body: &str) -> String {
     format!(
         "4{kind}{},{body}",
-        MANIFEST["connection"]["namespace"].as_str().unwrap()
+        MANIFEST["x-connection"]["namespace"].as_str().unwrap()
     )
 }

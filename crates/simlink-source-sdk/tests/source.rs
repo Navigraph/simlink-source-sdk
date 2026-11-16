@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use simlink_source_sdk::*;
-use support::manifest::{MANIFEST, valid};
+use support::manifest::{MANIFEST, schema, valid};
 use support::server::Server;
 
 const WAIT: Duration = Duration::from_secs(5);
@@ -31,11 +31,11 @@ fn source(server: &Server, events: Vec<Event>) -> Source {
 
 /// A handshake error, checked against the manifest so a change there fails here.
 fn refusal(error: Value) -> Value {
-    valid("handshake error", &MANIFEST["handshakeErrors"], &error).unwrap();
+    valid("handshake error", &schema("handshakeErrors"), &error).unwrap();
     error
 }
 
-fn ownship(latitude: f64) -> TelemetryOwnship {
+fn ownship(latitude: f64) -> TelemetryOwnshipEvent {
     serde_json::from_value(json!({
         "aircraft": {
             "position": { "latitude": latitude, "longitude": 17.9 },
@@ -80,8 +80,8 @@ impl RejectionListener for Forward<Rejection> {
     }
 }
 
-impl AtisGetHandler for Forward<(AtisGetInput, Arc<AtisGetReply>)> {
-    fn handle(&self, input: AtisGetInput, reply: Arc<AtisGetReply>) {
+impl AtisGetHandler for Forward<(AtisGetCommandInput, Arc<AtisGetReply>)> {
+    fn handle(&self, input: AtisGetCommandInput, reply: Arc<AtisGetReply>) {
         self.send((input, reply));
     }
 }
@@ -141,7 +141,7 @@ fn joins_and_emits_valid_events() {
     source.start().unwrap();
 
     let join = server.wait_for_join(WAIT).expect("the source joins");
-    valid("descriptor", &MANIFEST["descriptor"], &join).unwrap();
+    valid("descriptor", &schema("descriptor"), &join).unwrap();
     assert_eq!(join["id"], "test-source");
     assert_eq!(
         join["capabilities"],
@@ -195,7 +195,9 @@ fn answers_and_refuses_commands_after_the_handler_returns() {
         let (_, reply) = requests
             .recv_timeout(WAIT)
             .expect("the second command arrives");
-        reply.refuse(AtisGetError::AtisNotAvailable).unwrap();
+        reply
+            .refuse(AtisGetCommandRefusal::AtisNotAvailable)
+            .unwrap();
     });
 
     let answers = [
@@ -210,12 +212,7 @@ fn answers_and_refuses_commands_after_the_handler_returns() {
         ]
     );
     for answer in answers.iter().flatten() {
-        valid(
-            "answer",
-            &MANIFEST["commands"]["atis.get"]["result"],
-            answer,
-        )
-        .unwrap();
+        valid("answer", &schema("commands/atis.get/result"), answer).unwrap();
     }
     answering.join().unwrap();
 }
@@ -239,7 +236,7 @@ fn refuses_payloads_over_the_message_limit() {
         },
     }))
     .unwrap();
-    let limit = MANIFEST["connection"]["socketIo"]["maxPayloadBytes"]
+    let limit = MANIFEST["x-connection"]["socketIo"]["maxPayloadBytes"]
         .as_u64()
         .unwrap() as usize;
     let size = serde_json::to_string(&aircraft).unwrap().len();
@@ -265,7 +262,7 @@ fn relays_simlink_rejections() {
         "message": "bad traffic",
         "issues": [{ "code": "invalid_type", "message": "Required", "path": [3, "aircraft", "position"] }],
     });
-    valid("error frame", &MANIFEST["errorFrame"], &frame).unwrap();
+    valid("error frame", &schema("errorFrame"), &frame).unwrap();
     server.send_error(frame);
     assert_eq!(
         rejections.recv_timeout(WAIT),
@@ -550,7 +547,9 @@ fn drops_replies_to_an_earlier_connection() {
     // The new connection numbers its commands from 1 again, so a leaked reply would answer this one.
     let asking = ask();
     let (_, fresh) = requests.recv_timeout(WAIT).expect("the command arrives");
-    stale.refuse(AtisGetError::AtisNotAvailable).unwrap();
+    stale
+        .refuse(AtisGetCommandRefusal::AtisNotAvailable)
+        .unwrap();
     fresh.ok(vec![]).unwrap();
     assert_eq!(
         asking.join().unwrap(),

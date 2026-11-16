@@ -9,7 +9,7 @@ use simlink_source_sdk::*;
 struct FlightPlans;
 
 impl FlightplanGetHandler for FlightPlans {
-    fn handle(&self, input: FlightplanGetInput, reply: Arc<FlightplanGetReply>) {
+    fn handle(&self, input: FlightplanGetCommandInput, reply: Arc<FlightplanGetReply>) {
         // Every requested key gets an entry; `None` when this source has no plan for it.
         let plans: HashMap<String, Option<FlightPlan>> = input
             .keys
@@ -47,7 +47,7 @@ fn traffic() -> Vec<TrafficPosition> {
         // Identified by ICAO type designator, with every optional field filled in.
         TrafficPosition {
             key: "EZY382".into(),
-            aircraft: TrafficPositionAircraft::Type {
+            aircraft: TrafficAircraft::Type {
                 type_: "A320".into(),
                 callsign: Some("EZY382".into()),
                 position: Coordinates {
@@ -80,7 +80,7 @@ fn traffic() -> Vec<TrafficPosition> {
         // Identified by category when the exact type is unknown, with only the required fields.
         TrafficPosition {
             key: "SEJKL".into(),
-            aircraft: TrafficPositionAircraft::Category {
+            aircraft: TrafficAircraft::Category {
                 category: AircraftCategory {
                     type_: AircraftCategoryType::Helicopter,
                     operator_type: None,
@@ -127,15 +127,17 @@ fn flight_plan(key: &str) -> Option<FlightPlan> {
         aircraft: "A320".into(),
         origin: FlightPlanAirport {
             ident: "EGKK".into(),
-            coords: Some(FlightPlanAirportCoords {
+            coords: AirportCoordinates {
                 lat: 51.148,
                 lon: -0.190,
-            }),
+            },
         },
-        // Coordinates are optional.
         destination: FlightPlanAirport {
             ident: "ESSA".into(),
-            coords: None,
+            coords: AirportCoordinates {
+                lat: 59.652,
+                lon: 17.919,
+            },
         },
         route: "EGKK DCT ESSA".into(),
         stats: FlightPlanStats {

@@ -14,7 +14,7 @@ Thread.Sleep(Timeout.Infinite);
 
 class Atis : AtisGetHandler
 {
-    public void Handle(AtisGetInput input, AtisGetReply reply)
+    public void Handle(AtisGetCommandInput input, AtisGetReply reply)
     {
         using (reply)
         {
@@ -27,7 +27,7 @@ class Atis : AtisGetHandler
                 }
                 else
                 {
-                    reply.Refuse(AtisGetError.AtisNotAvailable);
+                    reply.Refuse(AtisGetCommandRefusal.AtisNotAvailable);
                 }
             }
             catch (SimlinkException error)

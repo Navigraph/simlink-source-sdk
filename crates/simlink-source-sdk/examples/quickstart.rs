@@ -21,9 +21,9 @@ fn main() -> Result<(), Error> {
 }
 
 /// In a real source these values come from the simulator.
-fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnship {
-    TelemetryOwnship {
-        aircraft: TelemetryOwnshipAircraft {
+fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnshipEvent {
+    TelemetryOwnshipEvent {
+        aircraft: OwnshipAircraft {
             position: Coordinates {
                 latitude,
                 longitude,
@@ -57,7 +57,7 @@ fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnship {
                 operator_type: None,
             }),
         },
-        simulation: TelemetryOwnshipSimulation {
+        simulation: OwnshipSimulation {
             paused: false,
             slew: false,
             time: None,

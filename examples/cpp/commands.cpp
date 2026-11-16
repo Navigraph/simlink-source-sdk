@@ -32,14 +32,14 @@ std::optional<std::vector<simlink_source_sdk::AtisReport>> atis(const std::strin
 }
 
 struct Atis : simlink_source_sdk::AtisGetHandler {
-    void handle(const simlink_source_sdk::AtisGetInput& input,
+    void handle(const simlink_source_sdk::AtisGetCommandInput& input,
                 const std::shared_ptr<simlink_source_sdk::AtisGetReply>& reply) override {
         // Answering twice throws simlink_source_sdk::SimlinkError.
         try {
             if (auto reports = atis(input.icao)) {
                 reply->ok(*reports);
             } else {
-                reply->refuse(simlink_source_sdk::AtisGetError::kAtisNotAvailable);
+                reply->refuse(simlink_source_sdk::AtisGetCommandRefusal::kAtisNotAvailable);
             }
         } catch (const simlink_source_sdk::SimlinkError& error) {
             std::fprintf(stderr, "Could not answer atis.get: %s\n", error.what());

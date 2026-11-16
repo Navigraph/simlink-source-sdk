@@ -40,7 +40,7 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
         .unzip();
 
     let commands = manifest.commands.iter().zip(&types.commands).map(
-        |(command, [input, output, error])| {
+        |(command, [input, output, refusal])| {
             let Channel {
                 name,
                 doc,
@@ -80,7 +80,7 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
                     }
 
                     /// Refuses with one of the command's declared error codes.
-                    pub fn refuse(&self, error: #error) -> ::std::result::Result<(), crate::Error> {
+                    pub fn refuse(&self, error: #refusal) -> ::std::result::Result<(), crate::Error> {
                         self.0.refuse(&error)
                     }
                 }

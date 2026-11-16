@@ -8,10 +8,10 @@ use simlink_source_sdk::*;
 struct Atis;
 
 impl AtisGetHandler for Atis {
-    fn handle(&self, input: AtisGetInput, reply: Arc<AtisGetReply>) {
+    fn handle(&self, input: AtisGetCommandInput, reply: Arc<AtisGetReply>) {
         let answered = match atis(&input.icao) {
             Some(reports) => reply.ok(reports),
-            None => reply.refuse(AtisGetError::AtisNotAvailable),
+            None => reply.refuse(AtisGetCommandRefusal::AtisNotAvailable),
         };
         // Answering twice fails with `Error::AlreadyAnswered`.
         if let Err(error) = answered {

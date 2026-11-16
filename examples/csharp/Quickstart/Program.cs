@@ -17,9 +17,9 @@ while (true)
 }
 
 // In a real source these values come from the simulator.
-static TelemetryOwnship Ownship(double latitude, double longitude)
+static TelemetryOwnshipEvent Ownship(double latitude, double longitude)
 {
-    var aircraft = new TelemetryOwnshipAircraft(
+    var aircraft = new OwnshipAircraft(
         Position: new Coordinates(Latitude: latitude, Longitude: longitude),
         Altitude: new OwnshipAltitude(True: 1200, Agl: 900, Indicated: 1200, Pressure: null),
         Speed: new OwnshipSpeed(Gs: 140, Ias: 135, Tas: 138),
@@ -31,7 +31,7 @@ static TelemetryOwnship Ownship(double latitude, double longitude)
         Gforce: 1,
         Transponder: "7000",
         Category: new AircraftCategory(Type: AircraftCategoryType.Piston, OperatorType: null));
-    var simulation = new TelemetryOwnshipSimulation(Paused: false, Slew: false, Time: null);
+    var simulation = new OwnshipSimulation(Paused: false, Slew: false, Time: null);
 
-    return new TelemetryOwnship(Aircraft: aircraft, Simulation: simulation);
+    return new TelemetryOwnshipEvent(Aircraft: aircraft, Simulation: simulation);
 }

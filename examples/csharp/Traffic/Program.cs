@@ -22,7 +22,7 @@ static TrafficPosition[] Traffic() =>
     // Identified by ICAO type designator, with every optional field filled in.
     new TrafficPosition(
         Key: "EZY382",
-        Aircraft: new TrafficPositionAircraft.Type(
+        Aircraft: new TrafficAircraft.Type(
             TypeValue: "A320",
             Callsign: "EZY382",
             Position: new Coordinates(Latitude: 59.70, Longitude: 17.95),
@@ -35,7 +35,7 @@ static TrafficPosition[] Traffic() =>
     // Identified by category when the exact type is unknown, with only the required fields.
     new TrafficPosition(
         Key: "SEJKL",
-        Aircraft: new TrafficPositionAircraft.Category(
+        Aircraft: new TrafficAircraft.Category(
             CategoryValue: new AircraftCategory(Type: AircraftCategoryType.Helicopter, OperatorType: null),
             TypeValue: null,
             Callsign: null,
@@ -51,7 +51,7 @@ static TrafficPosition[] Traffic() =>
 
 class FlightPlans : FlightplanGetHandler
 {
-    public void Handle(FlightplanGetInput input, FlightplanGetReply reply)
+    public void Handle(FlightplanGetCommandInput input, FlightplanGetReply reply)
     {
         using (reply)
         {
@@ -66,9 +66,8 @@ class FlightPlans : FlightplanGetHandler
         Callsign: "EZY382",
         PilotName: "Jane Doe",
         Aircraft: "A320",
-        Origin: new FlightPlanAirport(Ident: "EGKK", Coords: new FlightPlanAirportCoords(Lat: 51.148, Lon: -0.190)),
-        // Coordinates are optional.
-        Destination: new FlightPlanAirport(Ident: "ESSA", Coords: null),
+        Origin: new FlightPlanAirport(Ident: "EGKK", Coords: new AirportCoordinates(Lat: 51.148, Lon: -0.190)),
+        Destination: new FlightPlanAirport(Ident: "ESSA", Coords: new AirportCoordinates(Lat: 59.652, Lon: 17.919)),
         Route: "EGKK DCT ESSA",
         Stats: new FlightPlanStats(
             DepDist: 712,

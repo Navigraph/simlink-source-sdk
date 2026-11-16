@@ -103,8 +103,8 @@ Each quickstart emits the aircraft's position ten times a second.
 #include <simlink_source_sdk.hpp>
 
 // In a real source these values come from the simulator.
-simlink_source_sdk::TelemetryOwnship ownship(double latitude, double longitude) {
-    simlink_source_sdk::TelemetryOwnship ownship{};
+simlink_source_sdk::TelemetryOwnshipEvent ownship(double latitude, double longitude) {
+    simlink_source_sdk::TelemetryOwnshipEvent ownship{};
     auto& aircraft = ownship.aircraft;
     aircraft.position = {latitude, longitude};
     aircraft.altitude.true_ = 1200;
@@ -160,9 +160,9 @@ while (true)
 }
 
 // In a real source these values come from the simulator.
-static TelemetryOwnship Ownship(double latitude, double longitude)
+static TelemetryOwnshipEvent Ownship(double latitude, double longitude)
 {
-    var aircraft = new TelemetryOwnshipAircraft(
+    var aircraft = new OwnshipAircraft(
         Position: new Coordinates(Latitude: latitude, Longitude: longitude),
         Altitude: new OwnshipAltitude(True: 1200, Agl: 900, Indicated: 1200, Pressure: null),
         Speed: new OwnshipSpeed(Gs: 140, Ias: 135, Tas: 138),
@@ -174,9 +174,9 @@ static TelemetryOwnship Ownship(double latitude, double longitude)
         Gforce: 1,
         Transponder: "7000",
         Category: new AircraftCategory(Type: AircraftCategoryType.Piston, OperatorType: null));
-    var simulation = new TelemetryOwnshipSimulation(Paused: false, Slew: false, Time: null);
+    var simulation = new OwnshipSimulation(Paused: false, Slew: false, Time: null);
 
-    return new TelemetryOwnship(Aircraft: aircraft, Simulation: simulation);
+    return new TelemetryOwnshipEvent(Aircraft: aircraft, Simulation: simulation);
 }
 ```
 
@@ -207,9 +207,9 @@ fn main() -> Result<(), Error> {
 }
 
 /// In a real source these values come from the simulator.
-fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnship {
-    TelemetryOwnship {
-        aircraft: TelemetryOwnshipAircraft {
+fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnshipEvent {
+    TelemetryOwnshipEvent {
+        aircraft: OwnshipAircraft {
             position: Coordinates {
                 latitude,
                 longitude,
@@ -243,7 +243,7 @@ fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnship {
                 operator_type: None,
             }),
         },
-        simulation: TelemetryOwnshipSimulation {
+        simulation: OwnshipSimulation {
             paused: false,
             slew: false,
             time: None,

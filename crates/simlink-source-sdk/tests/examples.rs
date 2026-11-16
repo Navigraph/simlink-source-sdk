@@ -10,7 +10,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use support::manifest::{MANIFEST, sample, valid};
+use support::manifest::{sample, schema, valid};
 use support::server::Server;
 
 // C# programs start the .NET runtime first.
@@ -62,7 +62,7 @@ fn run(program: &Path, server: &Server) -> Result<(), String> {
         });
     };
     // Simlink refuses an invalid descriptor for good.
-    valid("descriptor", &MANIFEST["descriptor"], &descriptor)?;
+    valid("descriptor", &schema("descriptor"), &descriptor)?;
     let declared = |kind: &str| -> Vec<String> {
         descriptor["capabilities"][kind]
             .as_array()
@@ -79,20 +79,18 @@ fn run(program: &Path, server: &Server) -> Result<(), String> {
             .ok_or(format!("emitted no {event}"))?;
         valid(
             &format!("{event} payload"),
-            &MANIFEST["events"][&event]["payload"],
+            &schema(&format!("events/{event}/payload")),
             &payload,
         )?;
     }
 
     for command in declared("commands") {
-        let schemas = &MANIFEST["commands"][&command];
+        let input = schema(&format!("commands/{command}/input"));
         let answer = server
-            .command(
-                &command,
-                sample(&schemas["input"], &schemas["input"], false, 0),
-            )
+            .command(&command, sample(&input, &input, false, 0))
             .ok_or(format!("did not answer {command}"))?;
-        valid(&format!("{command} answer"), &schemas["result"], &answer)?;
+        let result = schema(&format!("commands/{command}/result"));
+        valid(&format!("{command} answer"), &result, &answer)?;
     }
 
     // Every example survives a rejection, and the diagnostics ones print it, issues included.
@@ -102,7 +100,7 @@ fn run(program: &Path, server: &Server) -> Result<(), String> {
         "message": "test rejection",
         "issues": [{ "code": "custom", "message": "test issue", "path": ["aircraft", 0, "key"] }],
     });
-    valid("error frame", &MANIFEST["errorFrame"], &rejection)?;
+    valid("error frame", &schema("errorFrame"), &rejection)?;
     server.send_error(rejection);
     let name = program.file_stem().unwrap_or_default().to_string_lossy();
     if name.eq_ignore_ascii_case("diagnostics") {

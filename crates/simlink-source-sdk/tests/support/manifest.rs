@@ -8,6 +8,28 @@ pub static MANIFEST: LazyLock<Value> = LazyLock::new(|| {
     serde_json::from_str(include_str!("../../../../protocol/source-schema.json")).unwrap()
 });
 
+/// The schema of the protocol's `part`, such as `descriptor` or `events/telemetry.ownship/payload`, with the
+/// manifest's `$defs` so its references resolve.
+pub fn schema(part: &str) -> Value {
+    let pointer = format!("/properties/{}", part.replace('/', "/properties/"));
+    let mut schema = MANIFEST
+        .pointer(&pointer)
+        .unwrap_or_else(|| panic!("{part} is not in the manifest"))
+        .clone();
+    schema["$defs"] = MANIFEST["$defs"].clone();
+    schema
+}
+
+/// The names of the `events` or `commands`.
+pub fn channels(kind: &str) -> Vec<String> {
+    MANIFEST["properties"][kind]["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect()
+}
+
 /// Everything `value` violates in `schema`.
 pub fn issues(schema: &Value, value: &Value) -> Vec<String> {
     jsonschema::validator_for(schema)
@@ -47,6 +69,10 @@ pub fn sample(schema: &Value, root: &Value, full: bool, branch: usize) -> Value 
     let pick = |options: &Vec<Value>| options[branch % options.len()].clone();
     if let Some(target) = schema["$ref"].as_str().and_then(|r| r.strip_prefix('#')) {
         return sample(root.pointer(target).unwrap(), root, full, branch);
+    }
+    // A reference with its own keywords, such as a description.
+    if let Some([only]) = schema["allOf"].as_array().map(Vec::as_slice) {
+        return sample(only, root, full, branch);
     }
     if let Some(value) = schema.get("const") {
         return value.clone();

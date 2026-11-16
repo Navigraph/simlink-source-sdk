@@ -5,8 +5,8 @@
 #include <simlink_source_sdk.hpp>
 
 // In a real source these values come from the simulator.
-simlink_source_sdk::TelemetryOwnship ownship(double latitude, double longitude) {
-    simlink_source_sdk::TelemetryOwnship ownship{};
+simlink_source_sdk::TelemetryOwnshipEvent ownship(double latitude, double longitude) {
+    simlink_source_sdk::TelemetryOwnshipEvent ownship{};
     auto& aircraft = ownship.aircraft;
     aircraft.position = {latitude, longitude};
     aircraft.altitude.true_ = 1200;
