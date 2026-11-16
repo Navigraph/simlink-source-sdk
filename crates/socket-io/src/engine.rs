@@ -15,6 +15,7 @@ use crate::DisconnectReason;
 use crate::waker::Signal;
 use crate::wire::{self, Decoder, Engine, Inbound};
 
+const NO_OPEN: &str = "no Engine.IO open packet";
 const CLOSE_TIMEOUT: Duration = Duration::from_millis(500);
 // The default of Node's `ws`, which the reference client uses.
 const MAX_MESSAGE_SIZE: usize = 100 << 20;
@@ -103,7 +104,7 @@ impl Connection {
         loop {
             // Checked every iteration, so a silent or pinging server can't hold the attempt open.
             if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-                return Err("no Engine.IO open packet".into());
+                return Err(NO_OPEN.into());
             }
             match connection.socket.read() {
                 Ok(Message::Text(frame)) => match wire::decode_engine(&frame) {
@@ -111,15 +112,14 @@ impl Connection {
                         ping_interval,
                         ping_timeout,
                     }) => {
-                        connection.heartbeat = ping_interval + ping_timeout;
-                        connection.alive_until = Instant::now() + connection.heartbeat;
+                        connection.set_heartbeat(ping_interval + ping_timeout);
                         return Ok(connection);
                     }
-                    _ => return Err("no Engine.IO open packet".into()),
+                    _ => return Err(NO_OPEN.into()),
                 },
                 // Tungstenite answers these, as `ws` does.
                 Ok(Message::Ping(_) | Message::Pong(_)) => {}
-                Ok(_) => return Err("no Engine.IO open packet".into()),
+                Ok(_) => return Err(NO_OPEN.into()),
                 Err(tungstenite::Error::Io(e)) if e.kind() == ErrorKind::WouldBlock => {
                     connection.wait_for(Interest::readable(SOCKET), deadline);
                 }
@@ -190,8 +190,7 @@ impl Connection {
                     ping_interval,
                     ping_timeout,
                 }) => {
-                    self.heartbeat = ping_interval + ping_timeout;
-                    self.alive_until = Instant::now() + self.heartbeat;
+                    self.set_heartbeat(ping_interval + ping_timeout);
                     return Read::Handled;
                 }
                 Ok(Engine::Ignored) => return Read::Handled,
@@ -228,6 +227,12 @@ impl Connection {
                 _ => return,
             }
         }
+    }
+
+    /// Restarts the ping deadline with a new `pingInterval + pingTimeout`.
+    fn set_heartbeat(&mut self, heartbeat: Duration) {
+        self.heartbeat = heartbeat;
+        self.alive_until = Instant::now() + heartbeat;
     }
 
     /// Failures are kept for `read` to report.
