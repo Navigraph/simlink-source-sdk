@@ -1,8 +1,11 @@
 //! Reads the manifest into the model the generators work from, failing on anything the SDK doesn't handle.
 
-use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 
 use heck::ToUpperCamelCase;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer};
+use serde_json::{Map, Value};
 
 pub struct Channel {
     pub name: String,
@@ -33,6 +36,7 @@ pub struct Code {
 }
 
 /// A field of a code's metadata.
+#[derive(Clone)]
 pub struct Field {
     pub key: String,
     pub ty: FieldType,
@@ -40,24 +44,44 @@ pub struct Field {
 }
 
 /// The JSON types every binding has.
+#[derive(Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum FieldType {
     String,
     Integer,
     Number,
     Boolean,
-    Array(Box<FieldType>),
+    Array { items: Box<FieldType> },
 }
 
 /// What the SDK connects with.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Connection {
     pub protocol_version: u32,
     pub default_port: u16,
     pub port_probe_limit: u16,
-    pub max_payload_bytes: usize,
-    pub namespace: String,
     pub mdns_service_type: String,
+    pub socket_io: SocketIo,
+    pub namespace: String,
     pub error_channel: String,
-    pub socket_io_path: String,
+    #[serde(rename = "mdnsTxt")]
+    _mdns_txt: Object<MdnsTxt>,
+    /// An HTTP header Node clients may send the descriptor in instead of the auth payload.
+    #[serde(rename = "authHeader")]
+    _auth_header: Ignored,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SocketIo {
+    pub path: String,
+    pub max_payload_bytes: usize,
+    /// The client takes these from the Engine.IO open packet.
+    #[serde(rename = "pingIntervalMs")]
+    _ping_interval_ms: Ignored,
+    #[serde(rename = "pingTimeoutMs")]
+    _ping_timeout_ms: Ignored,
 }
 
 pub struct Manifest {
@@ -81,53 +105,274 @@ impl Manifest {
 }
 
 pub fn read(text: &str) -> Result<Manifest, String> {
-    let manifest: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
-    check_keys(&manifest)?;
+    let root: Root = strict("", &mut serde_json::Deserializer::from_str(text))?;
+    let Protocol {
+        descriptor,
+        handshake_errors,
+        error_frame,
+        events,
+        commands,
+    } = root.properties;
+
+    let mut handshake_codes = Vec::new();
+    let handshake_errors: OneOf<Object<HandshakeError>> = handshake_errors.read(&root.defs)?;
+    for error in handshake_errors.one_of {
+        handshake_codes.extend(error.properties.codes()?);
+    }
+    let error_frame: Object<ErrorFrame> = error_frame.read(&root.defs)?;
 
     Ok(Manifest {
-        descriptor: descriptor(part(&manifest, "descriptor")?)?,
-        events: channels(&manifest, "events")?
-            .iter()
-            .map(|(name, entry)| event(name, entry))
-            .collect::<Result<_, _>>()?,
-        commands: channels(&manifest, "commands")?
-            .iter()
-            .map(|(name, entry)| command(name, entry))
-            .collect::<Result<_, _>>()?,
-        handshake_errors: handshake_errors(&manifest)?
-            .iter()
-            .map(handshake_error)
-            .collect::<Result<_, _>>()?,
-        rejection_codes: rejection_codes(part(&manifest, "errorFrame")?)?,
-        connection: connection(&manifest["x-connection"])?,
-        defs: object(&manifest["$defs"], "$defs")?.clone(),
+        descriptor: source_options(descriptor.resolve(&root.defs)?)?,
+        events: events.properties.into_iter().map(Event::from).collect(),
+        commands: commands.properties.into_iter().map(Command::from).collect(),
+        handshake_errors: handshake_codes,
+        rejection_codes: error_frame.properties.code.codes("", Vec::new())?,
+        connection: root.connection,
+        defs: root.defs,
     })
 }
 
-/// The schema of the protocol's `key`, following its `$ref`.
-fn part<'a>(manifest: &'a Value, key: &str) -> Result<&'a Value, String> {
-    let schema = &manifest["properties"][key];
-    match schema["$ref"].as_str() {
-        None => Ok(schema),
-        Some(reference) => reference
-            .strip_prefix('#')
-            .and_then(|pointer| manifest.pointer(pointer))
-            .ok_or(format!("{key} refers to {reference}, which is missing")),
+#[derive(Deserialize)]
+struct Root {
+    #[serde(rename = "x-connection")]
+    connection: Connection,
+    properties: Protocol,
+    #[serde(rename = "$defs")]
+    defs: Map<String, Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Protocol {
+    descriptor: Ref,
+    handshake_errors: Ref,
+    error_frame: Ref,
+    events: Object<BTreeMap<String, EventEntry>>,
+    commands: Object<BTreeMap<String, CommandEntry>>,
+}
+
+#[derive(Deserialize)]
+struct Ref {
+    #[serde(rename = "$ref")]
+    path: String,
+}
+
+impl Ref {
+    fn resolve<'a>(&self, defs: &'a Map<String, Value>) -> Result<&'a Value, String> {
+        self.path
+            .strip_prefix("#/$defs/")
+            .and_then(|name| defs.get(name))
+            .ok_or(format!("{} is missing", self.path))
+    }
+
+    /// The definition, read as `T`.
+    fn read<T: DeserializeOwned>(&self, defs: &Map<String, Value>) -> Result<T, String> {
+        let at = format!("{}.", self.path.trim_start_matches("#/").replace('/', "."));
+        strict(&at, self.resolve(defs)?)
     }
 }
 
-/// The `events` or `commands` by name.
-fn channels<'a>(manifest: &'a Value, kind: &str) -> Result<&'a Map<String, Value>, String> {
-    object(&part(manifest, kind)?["properties"], kind)
+/// An object schema, of which the SDK reads the `properties`.
+#[derive(Deserialize)]
+struct Object<T> {
+    properties: T,
 }
 
-fn handshake_errors(manifest: &Value) -> Result<&Vec<Value>, String> {
-    part(manifest, "handshakeErrors")?["oneOf"]
-        .as_array()
-        .ok_or("handshakeErrors.oneOf is missing".into())
+#[derive(Deserialize)]
+struct OneOf<T> {
+    #[serde(rename = "oneOf")]
+    one_of: Vec<T>,
 }
 
-fn descriptor(descriptor: &Value) -> Result<Value, String> {
+/// A key the SDK knows about and leaves alone, with the reason where it's declared.
+type Ignored = Option<Value>;
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct MdnsTxt {
+    /// Discovery reads this key by name.
+    protocol: Value,
+    /// Informational.
+    version: Ignored,
+}
+
+/// The SDK only emits and answers on behalf of a source; other channels would point the wrong way.
+#[derive(Deserialize)]
+enum Origin {
+    #[serde(rename = "source")]
+    Source,
+}
+
+#[derive(Deserialize)]
+struct EventEntry {
+    #[serde(rename = "x-origin")]
+    _origin: Origin,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    deprecated: bool,
+    #[serde(rename = "x-deprecation", default)]
+    deprecation: String,
+    #[serde(rename = "x-max-rate-hz")]
+    max_rate_hz: Option<f64>,
+    properties: EventParts,
+}
+
+#[derive(Deserialize)]
+struct EventParts {
+    payload: Value,
+}
+
+#[derive(Deserialize)]
+struct CommandEntry {
+    #[serde(rename = "x-origin")]
+    _origin: Origin,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    deprecated: bool,
+    #[serde(rename = "x-deprecation", default)]
+    deprecation: String,
+    #[serde(rename = "x-timeout-ms")]
+    timeout_ms: u64,
+    properties: CommandParts,
+}
+
+#[derive(Deserialize)]
+struct CommandParts {
+    input: Value,
+    output: Value,
+    errors: Value,
+    /// The reply envelope, which the SDK writes and the tests check replies against.
+    #[serde(rename = "result")]
+    _result: Ignored,
+}
+
+impl Channel {
+    fn new(name: String, doc: String, deprecated: bool, deprecation: String) -> Channel {
+        Channel {
+            name,
+            doc,
+            deprecated: deprecated.then_some(deprecation),
+        }
+    }
+}
+
+impl From<(String, EventEntry)> for Event {
+    fn from((name, entry): (String, EventEntry)) -> Event {
+        Event {
+            channel: Channel::new(name, entry.description, entry.deprecated, entry.deprecation),
+            max_rate_hz: entry.max_rate_hz,
+            payload: entry.properties.payload,
+        }
+    }
+}
+
+impl From<(String, CommandEntry)> for Command {
+    fn from((name, entry): (String, CommandEntry)) -> Command {
+        Command {
+            channel: Channel::new(name, entry.description, entry.deprecated, entry.deprecation),
+            timeout_ms: entry.timeout_ms,
+            input: entry.properties.input,
+            output: entry.properties.output,
+            refusal: entry.properties.errors,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct HandshakeError {
+    code: CodeSchema,
+    #[serde(default)]
+    metadata: Metadata,
+}
+
+#[derive(Default, Deserialize)]
+struct Metadata {
+    properties: BTreeMap<String, FieldType>,
+    #[serde(default)]
+    required: Vec<String>,
+}
+
+impl HandshakeError {
+    fn codes(self) -> Result<Vec<Code>, String> {
+        let Metadata {
+            properties,
+            required,
+        } = self.metadata;
+        let fields = properties.into_iter().map(|(key, ty)| Field {
+            required: required.contains(&key),
+            key,
+            ty,
+        });
+        self.code.codes("HANDSHAKE_", fields.collect())
+    }
+}
+
+/// The frame fields the rejection listener reads by name, which must be present.
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct ErrorFrame {
+    event: Value,
+    message: Value,
+    code: CodeSchema,
+    issues: Issues,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct Issues {
+    items: Object<Issue>,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct Issue {
+    path: Value,
+    code: Value,
+    message: Value,
+}
+
+/// A string schema whose `const` or `enum` lists codes.
+#[derive(Deserialize)]
+struct CodeSchema {
+    #[serde(rename = "const")]
+    constant: Option<String>,
+    #[serde(rename = "enum", default)]
+    values: Vec<String>,
+    #[serde(default)]
+    description: String,
+}
+
+impl CodeSchema {
+    /// Each code, named as a variant without `prefix`: `HANDSHAKE_SOURCE_ID_IN_USE` → `SourceIdInUse`.
+    fn codes(self, prefix: &str, fields: Vec<Field>) -> Result<Vec<Code>, String> {
+        let codes: Vec<_> = self.constant.into_iter().chain(self.values).collect();
+        if codes.is_empty() {
+            return Err("a code schema has no const or enum".into());
+        }
+        codes
+            .into_iter()
+            .map(|code| {
+                let variant = code
+                    .strip_prefix(prefix)
+                    .unwrap_or(&code)
+                    .to_upper_camel_case();
+                if variant.is_empty() || variant == "Other" {
+                    return Err(format!("{code} can't name a variant"));
+                }
+                Ok(Code {
+                    doc: self.description.clone(),
+                    variant,
+                    fields: fields.clone(),
+                    code,
+                })
+            })
+            .collect()
+    }
+}
+
+fn source_options(descriptor: &Value) -> Result<Value, String> {
     let mut schema = descriptor.clone();
     schema["properties"]
         .as_object_mut()
@@ -144,159 +389,7 @@ fn descriptor(descriptor: &Value) -> Result<Value, String> {
     Ok(schema)
 }
 
-fn event(name: &str, entry: &Value) -> Result<Event, String> {
-    Ok(Event {
-        channel: channel(name, entry)?,
-        max_rate_hz: entry["x-max-rate-hz"].as_f64(),
-        payload: field(entry, name, "properties/payload", Some)?.clone(),
-    })
-}
-
-fn command(name: &str, entry: &Value) -> Result<Command, String> {
-    let schema = |key: &str| field(entry, name, &format!("properties/{key}"), Some).cloned();
-    Ok(Command {
-        channel: channel(name, entry)?,
-        timeout_ms: field(entry, name, "x-timeout-ms", Value::as_u64)?,
-        input: schema("input")?,
-        output: schema("output")?,
-        refusal: schema("errors")?,
-    })
-}
-
-/// What the generated API needs from a channel entry. The SDK only emits and answers on behalf of a source; other
-/// channels would point the wrong way.
-fn channel(name: &str, entry: &Value) -> Result<Channel, String> {
-    match entry["x-origin"].as_str() {
-        Some("source") => {}
-        origin => {
-            return Err(format!(
-                "{name} has origin {origin:?}; the SDK only handles source channels"
-            ));
-        }
-    }
-    let reason = entry["x-deprecation"].as_str().unwrap_or_default();
-    let deprecated = (entry["deprecated"] == true).then(|| reason.to_owned());
-
-    Ok(Channel {
-        name: name.to_owned(),
-        doc: entry["description"].as_str().unwrap_or_default().to_owned(),
-        deprecated,
-    })
-}
-
-/// A `handshakeErrors` entry: its code, and metadata fields of the types the SDK maps.
-fn handshake_error(error: &Value) -> Result<Code, String> {
-    let code = field(
-        error,
-        "handshakeErrors",
-        "properties/code/const",
-        Value::as_str,
-    )?;
-    let doc = error["properties"]["code"]["description"]
-        .as_str()
-        .unwrap_or_default();
-    let metadata = &error["properties"]["metadata"];
-    let required = metadata["required"].as_array().cloned().unwrap_or_default();
-
-    let fields = metadata["properties"]
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(key, schema)| {
-            Ok(Field {
-                key: key.clone(),
-                ty: field_type(schema).ok_or(format!(
-                    "handshakeErrors {code} has metadata.{key} of a type the SDK doesn't map yet"
-                ))?,
-                required: required.iter().any(|name| name == key),
-            })
-        })
-        .collect::<Result<_, String>>()?;
-
-    new_code(code, "HANDSHAKE_", doc, fields)
-}
-
-fn field_type(schema: &Value) -> Option<FieldType> {
-    Some(match schema["type"].as_str()? {
-        "string" => FieldType::String,
-        "integer" => FieldType::Integer,
-        "number" => FieldType::Number,
-        "boolean" => FieldType::Boolean,
-        "array" => FieldType::Array(Box::new(field_type(&schema["items"])?)),
-        _ => return None,
-    })
-}
-
-/// The error frame's codes. Also checks the frame fields the rejection listener reads by name.
-fn rejection_codes(frame: &Value) -> Result<Vec<Code>, String> {
-    for key in [
-        "event",
-        "message",
-        "issues/items/properties/path",
-        "issues/items/properties/message",
-        "issues/items/properties/code",
-    ] {
-        field(frame, "errorFrame", &format!("properties/{key}"), Some)?;
-    }
-
-    let code = &frame["properties"]["code"];
-    let codes = match (&code["const"], &code["enum"]) {
-        (Value::String(code), _) => vec![code.as_str()],
-        (_, Value::Array(codes)) => codes
-            .iter()
-            .map(Value::as_str)
-            .collect::<Option<_>>()
-            .ok_or("errorFrame.properties.code.enum has a code that isn't a string")?,
-        _ => return Err("errorFrame.properties.code has no const or enum".into()),
-    };
-    codes
-        .into_iter()
-        .map(|code| new_code(code, "", "", Vec::new()))
-        .collect()
-}
-
-/// `HANDSHAKE_SOURCE_ID_IN_USE` → `SourceIdInUse`, without `prefix`.
-fn new_code(code: &str, prefix: &str, doc: &str, fields: Vec<Field>) -> Result<Code, String> {
-    let variant = code
-        .strip_prefix(prefix)
-        .unwrap_or(code)
-        .to_upper_camel_case();
-    if variant.is_empty() || variant == "Other" {
-        return Err(format!("{code} can't name a variant"));
-    }
-
-    Ok(Code {
-        code: code.to_owned(),
-        doc: doc.to_owned(),
-        variant,
-        fields,
-    })
-}
-
-fn connection(connection: &Value) -> Result<Connection, String> {
-    let number = |key| field(connection, "connection", key, Value::as_u64);
-    let text = |key| field(connection, "connection", key, Value::as_str).map(str::to_owned);
-    // Discovery reads this TXT key by name.
-    field(
-        connection,
-        "connection",
-        "mdnsTxt/properties/protocol",
-        Some,
-    )?;
-
-    Ok(Connection {
-        protocol_version: number("protocolVersion")? as u32,
-        default_port: number("defaultPort")? as u16,
-        port_probe_limit: number("portProbeLimit")? as u16,
-        max_payload_bytes: number("socketIo/maxPayloadBytes")? as usize,
-        namespace: text("namespace")?,
-        mdns_service_type: text("mdnsServiceType")?,
-        error_channel: text("errorChannel")?,
-        socket_io_path: text("socketIo/path")?,
-    })
-}
-
-/// Keywords that only make an object containing schemas a schema itself.
+/// Keywords that only make an object holding the protocol's parts a schema itself.
 const WRAPPER: &[&str] = &[
     "$schema",
     "title",
@@ -305,148 +398,31 @@ const WRAPPER: &[&str] = &[
     "additionalProperties",
 ];
 
-/// Fails on any manifest key the SDK neither reads nor ignores on purpose, so a sync can't add something the SDK
-/// silently skips. Schemas typify turns into types are left out: their types follow the manifest.
-fn check_keys(manifest: &Value) -> Result<(), String> {
-    known_keys(
-        manifest,
-        "manifest",
-        &[WRAPPER, &["properties", "$defs", "x-connection"]].concat(),
-    )?;
-    known_keys(
-        &manifest["properties"],
-        "manifest.properties",
-        &[
-            "descriptor",
-            "handshakeErrors",
-            "errorFrame",
-            "events",
-            "commands",
-        ],
-    )?;
-    let connection = &manifest["x-connection"];
-    known_keys(
-        connection,
-        "x-connection",
-        &[
-            "protocolVersion",
-            "defaultPort",
-            "portProbeLimit",
-            "mdnsServiceType",
-            "mdnsTxt",
-            "socketIo",
-            "namespace",
-            "errorChannel",
-            // Ignored: an HTTP header Node clients may send the descriptor in instead of the auth payload.
-            "authHeader",
-        ],
-    )?;
-    known_keys(
-        &connection["socketIo"],
-        "x-connection.socketIo",
-        &[
-            "path",
-            "maxPayloadBytes",
-            // Ignored: the client takes these from the Engine.IO open packet.
-            "pingIntervalMs",
-            "pingTimeoutMs",
-        ],
-    )?;
-    known_keys(
-        &connection["mdnsTxt"]["properties"],
-        "x-connection.mdnsTxt.properties",
-        // Ignored: `version`, which is informational.
-        &["protocol", "version"],
-    )?;
-
-    for error in handshake_errors(manifest)? {
-        known_keys(
-            &error["properties"],
-            "handshakeErrors.oneOf.properties",
-            &["code", "metadata"],
-        )?;
-    }
-    let frame = &part(manifest, "errorFrame")?["properties"];
-    known_keys(
-        frame,
-        "errorFrame.properties",
-        &["event", "code", "message", "issues"],
-    )?;
-    known_keys(
-        &frame["issues"]["items"]["properties"],
-        "errorFrame.properties.issues.items.properties",
-        &["code", "message", "path"],
-    )?;
-
-    let channel_keys = [
-        WRAPPER,
-        &[
-            "properties",
-            "description",
-            "deprecated",
-            "x-deprecation",
-            "x-origin",
-        ],
-    ]
-    .concat();
-    for (name, entry) in channels(manifest, "events")? {
-        let at = format!("events.{name}");
-        known_keys(
-            entry,
-            &at,
-            &[&channel_keys[..], &["x-max-rate-hz"]].concat(),
-        )?;
-        known_keys(
-            &entry["properties"],
-            &format!("{at}.properties"),
-            &["payload"],
-        )?;
-    }
-    for (name, entry) in channels(manifest, "commands")? {
-        let at = format!("commands.{name}");
-        known_keys(entry, &at, &[&channel_keys[..], &["x-timeout-ms"]].concat())?;
-        known_keys(
-            &entry["properties"],
-            &format!("{at}.properties"),
-            &[
-                "input", "output", "errors",
-                // Ignored: the reply envelope, which the SDK writes and the tests check replies against.
-                "result",
-            ],
-        )?;
-    }
-
-    Ok(())
-}
-
-fn object<'a>(value: &'a Value, at: &str) -> Result<&'a Map<String, Value>, String> {
-    value.as_object().ok_or(format!("{at} is missing"))
-}
-
-fn known_keys(value: &Value, at: &str, known: &[&str]) -> Result<(), String> {
-    match object(value, at)?
-        .keys()
-        .find(|key| !known.contains(&key.as_str()))
-    {
-        Some(key) => Err(format!(
-            "the manifest has {at}.{key}, which the SDK doesn't handle yet; read it in the macro, or add it to the \
-             keys ignored on purpose in check_keys"
-        )),
-        None => Ok(()),
-    }
-}
-
-/// `key`, a `/`-separated path below `value`, read as `read` wants it. `at` names `value` in the error.
-fn field<'a, T>(
-    value: &'a Value,
+/// Deserializes `T`, failing on any key it doesn't read, so a sync can't add something the SDK silently skips. `at`
+/// prefixes paths in errors. Schemas typify turns into types are read whole: their types follow the manifest.
+fn strict<'de, T: Deserialize<'de>>(
     at: &str,
-    key: &str,
-    read: impl FnOnce(&'a Value) -> Option<T>,
+    deserializer: impl Deserializer<'de>,
 ) -> Result<T, String> {
-    value
-        .pointer(&format!("/{key}"))
-        .and_then(read)
-        .ok_or_else(|| format!("{at}.{} is missing", key.replace('/', ".")))
+    let mut unknown = None;
+    let mut ignored = |path: serde_ignored::Path| {
+        let wrapper = matches!(&path, serde_ignored::Path::Map { key, .. } if WRAPPER.contains(&key.as_str()));
+        if !wrapper && unknown.is_none() {
+            unknown = Some(path.to_string());
+        }
+    };
+    let value = serde_path_to_error::deserialize(serde_ignored::Deserializer::new(
+        deserializer,
+        &mut ignored,
+    ))
+    .map_err(|e| format!("{at}{}: {}", e.path(), e.inner()))?;
+    match unknown {
+        Some(path) => Err(format!(
+            "the manifest has {at}{path}, which the SDK doesn't handle yet; read it in the macro, or declare it \
+             `Ignored` with the reason"
+        )),
+        None => Ok(value),
+    }
 }
 
 #[cfg(test)]
@@ -458,21 +434,23 @@ mod tests {
     #[test]
     fn rejects_manifest_keys_the_sdk_does_not_handle() {
         let text = include_str!("../../../protocol/source-schema.json");
-        let manifest: Value = serde_json::from_str(text).unwrap();
-        assert_eq!(check_keys(&manifest), Ok(()));
+        assert!(read(text).is_ok());
 
+        let manifest: Value = serde_json::from_str(text).unwrap();
         for pointer in [
             "",
-            "/properties",
             "/x-connection",
+            "/x-connection/socketIo",
+            "/properties",
             "/properties/events/properties/telemetry.ownship",
-            "/properties/events/properties/telemetry.ownship/properties",
+            "/properties/commands/properties/atis.get/properties",
+            "/$defs/HandshakeError/oneOf/1/properties",
             "/$defs/SourceErrorFrame/properties",
         ] {
             let mut changed = manifest.clone();
             changed.pointer_mut(pointer).unwrap()["unknown"] = json!(1);
-            let error = check_keys(&changed).unwrap_err();
-            assert!(error.contains(".unknown,"), "{pointer}: {error}");
+            let error = read(&changed.to_string()).err().unwrap();
+            assert!(error.contains("unknown, which"), "{pointer}: {error}");
         }
     }
 }

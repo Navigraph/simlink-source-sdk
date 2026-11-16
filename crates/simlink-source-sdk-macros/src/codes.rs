@@ -156,8 +156,8 @@ fn rust_type(ty: &FieldType) -> TokenStream {
         FieldType::Integer => quote!(i64),
         FieldType::Number => quote!(f64),
         FieldType::Boolean => quote!(bool),
-        FieldType::Array(item) => {
-            let item = rust_type(item);
+        FieldType::Array { items } => {
+            let item = rust_type(items);
             quote!(Vec<#item>)
         }
     }

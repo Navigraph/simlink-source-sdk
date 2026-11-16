@@ -72,7 +72,8 @@ integrators must fill in. Channel descriptions and deprecations carry over as do
 `#[non_exhaustive]`, so a manifest update that adds a variant doesn't break integrators' Rust `match`es.
 
 The macro fails the build when the manifest has something the SDK doesn't handle: a key it neither reads nor ignores
-on purpose (`check_keys` lists the ignored ones and why), a channel that doesn't originate from the source, a missing
+on purpose (`manifest.rs` reads the manifest into serde structs, `serde_ignored` reports any key they don't read, and
+the ones ignored on purpose are fields typed `Ignored`, with the reason), a channel that doesn't originate from the source, a missing
 field the core reads by name, or handshake error metadata that isn't a string, number, boolean or array of them. `include_bytes!` on the manifest rebuilds the crate
 whenever it changes.
 

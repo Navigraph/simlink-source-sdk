@@ -12,8 +12,8 @@ every example against the fake Simlink and checks the README's snippets.
 
 What's left for the reviewer:
 
-- [ ] **Build failures.** Each macro error names what the SDK doesn't handle. A key failing `check_keys` is read in
-  the macro, or added to the ignored keys with the reason. Anything else, such as a channel Simlink originates or
+- [ ] **Build failures.** Each macro error names what the SDK doesn't handle. An unhandled key is read in the macro,
+  or declared as an `Ignored` field with the reason. Anything else, such as a channel Simlink originates or
   metadata the macro can't map, needs the SDK extended before the update can merge.
 - [ ] **New channels.** List their types in `tests/schema.rs`.
 - [ ] **Generated names.** Run `cargo xtask build` and check new names in `target/bindings`. The C# generator renames

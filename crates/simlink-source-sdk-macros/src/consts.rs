@@ -10,12 +10,13 @@ pub fn generate(manifest: &Manifest) -> TokenStream {
         protocol_version,
         default_port,
         port_probe_limit,
-        max_payload_bytes,
-        namespace,
         mdns_service_type,
+        socket_io,
+        namespace,
         error_channel,
-        socket_io_path,
+        ..
     } = &manifest.connection;
+    let (socket_io_path, max_payload_bytes) = (&socket_io.path, socket_io.max_payload_bytes);
 
     let events = manifest.events.iter().map(|event| {
         let name = &event.channel.name;
