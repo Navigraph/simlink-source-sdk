@@ -21,7 +21,7 @@ std::vector<simlink_source_sdk::TrafficPosition> traffic() {
     // Identified by category when the exact type is unknown, with only the required fields.
     // An unset transponder means "1200".
     simlink_source_sdk::TrafficPositionAircraft::kCategory helicopter{};
-    helicopter.category = simlink_source_sdk::TrafficCategory::kHelicopter;
+    helicopter.category.type = simlink_source_sdk::AircraftCategoryType::kHelicopter;
     helicopter.position = {.latitude = 59.64, .longitude = 17.90};
     helicopter.altitude = {.true_ = 800};
     helicopter.speed = {.gs = 90};

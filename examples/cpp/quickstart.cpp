@@ -18,6 +18,7 @@ simlink_source_sdk::TelemetryOwnship ownship(double latitude, double longitude) 
     aircraft.attitude = {.bank = 0, .pitch = 2.5};
     aircraft.gforce = 1;
     aircraft.transponder = "7000";
+    aircraft.category = {.type = simlink_source_sdk::AircraftCategoryType::kPiston};
     return ownship;
 }
 
