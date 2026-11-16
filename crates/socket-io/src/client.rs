@@ -68,17 +68,12 @@ impl Client {
         options: Options,
     ) -> std::io::Result<Client> {
         let backoff = Backoff::new(options.reconnection_delay, options.reconnection_delay_max);
-        Ok(Client {
+        let mut client = Client {
             addresses: Box::new(addresses),
             options,
             namespace: namespace.to_owned(),
             auth,
-            state: State::Opening {
-                candidates: None,
-                next: None,
-                error: None,
-                acks: Vec::new(),
-            },
+            state: State::Idle,
             connection: 0,
             backoff,
             joining: true,
@@ -88,7 +83,9 @@ impl Client {
             was_writable: false,
             events: VecDeque::new(),
             signal: Signal::new()?,
-        })
+        };
+        client.open();
+        Ok(client)
     }
 
     /// Wakes [`Client::poll`] from another thread.
