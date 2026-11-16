@@ -1218,6 +1218,7 @@ dependencies = [
 name = "simlink-source-sdk-macros"
 version = "1.0.0-rc2"
 dependencies = [
+ "heck",
  "proc-macro2",
  "quote",
  "schemars",

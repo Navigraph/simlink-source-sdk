@@ -5,7 +5,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use crate::manifest::{Code, FieldType, Manifest};
-use crate::names::{pascal, snake};
+use heck::{ToSnakeCase, ToUpperCamelCase};
 
 pub fn generate(manifest: &Manifest) -> TokenStream {
     let handshake_error = code_enum(
@@ -23,7 +23,7 @@ pub fn generate(manifest: &Manifest) -> TokenStream {
         .channels()
         .map(|channel| {
             let (name, doc) = (&channel.name, &channel.doc);
-            let variant = format_ident!("{}", pascal(name));
+            let variant = format_ident!("{}", name.to_upper_camel_case());
             (
                 quote!(#[doc = #doc] #variant),
                 quote!(#name => Self::#variant),
@@ -77,7 +77,7 @@ fn code_enum(name: &str, doc: &str, codes: &[Code]) -> TokenStream {
             let (literal, doc) = (&code.code, &code.doc);
             let variant = format_ident!("{}", code.variant);
             let fields = code.fields.iter().map(|field| {
-                let name = format_ident!("{}", snake(&field.key));
+                let name = format_ident!("{}", field.key.to_snake_case());
                 let ty = rust_type(&field.ty);
                 let ty = if field.required {
                     ty
@@ -87,7 +87,7 @@ fn code_enum(name: &str, doc: &str, codes: &[Code]) -> TokenStream {
                 quote!(#name: #ty)
             });
             let reads = code.fields.iter().map(|field| {
-                let (name, key) = (format_ident!("{}", snake(&field.key)), &field.key);
+                let (name, key) = (format_ident!("{}", field.key.to_snake_case()), &field.key);
                 quote!(#name: field(metadata, #key))
             });
             let (declare, read) = if code.fields.is_empty() {

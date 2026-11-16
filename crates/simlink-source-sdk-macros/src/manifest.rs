@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::names::pascal;
+use heck::ToUpperCamelCase;
 
 pub struct Channel {
     pub name: String,
@@ -257,12 +257,10 @@ fn rejection_codes(frame: &Value) -> Result<Vec<Code>, String> {
 
 /// `HANDSHAKE_SOURCE_ID_IN_USE` → `SourceIdInUse`, without `prefix`.
 fn new_code(code: &str, prefix: &str, doc: &str, fields: Vec<Field>) -> Result<Code, String> {
-    let variant = pascal(
-        &code
-            .strip_prefix(prefix)
-            .unwrap_or(code)
-            .to_ascii_lowercase(),
-    );
+    let variant = code
+        .strip_prefix(prefix)
+        .unwrap_or(code)
+        .to_upper_camel_case();
     if variant.is_empty() || variant == "Other" {
         return Err(format!("{code} can't name a variant"));
     }

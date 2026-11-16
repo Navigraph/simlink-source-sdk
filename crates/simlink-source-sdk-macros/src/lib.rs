@@ -10,7 +10,6 @@ mod api;
 mod codes;
 mod consts;
 mod manifest;
-mod names;
 mod types;
 
 use quote::quote;

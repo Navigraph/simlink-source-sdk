@@ -4,8 +4,8 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use crate::manifest::{Channel, Manifest};
-use crate::names::{pascal, sentences, snake};
 use crate::types::Types;
+use heck::{ToSnakeCase, ToUpperCamelCase};
 
 pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
     let (variants, emits): (Vec<_>, Vec<_>) = manifest
@@ -18,8 +18,8 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
                 doc,
                 deprecated,
             } = &event.channel;
-            let variant = format_ident!("{}", pascal(name));
-            let method = format_ident!("emit_{}", snake(name));
+            let variant = format_ident!("{}", name.to_upper_camel_case());
+            let method = format_ident!("emit_{}", name.to_snake_case());
             let rate = event
                 .max_rate_hz
                 .map(|rate| format!("Sent at most {rate} Hz; the latest payload wins."))
@@ -46,9 +46,9 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
                 doc,
                 deprecated,
             } = &command.channel;
-            let base = pascal(name);
+            let base = name.to_upper_camel_case();
             let (handler, reply) = (format_ident!("{base}Handler"), format_ident!("{base}Reply"));
-            let method = format_ident!("on_{}", snake(name));
+            let method = format_ident!("on_{}", name.to_snake_case());
             let timeout = format!(
                 "Answer within {} ms. Register before `start`.",
                 command.timeout_ms
@@ -134,5 +134,30 @@ fn deprecated(reason: &Option<String>) -> Option<TokenStream> {
     match reason.as_deref()? {
         "" => Some(quote!(#[deprecated])),
         reason => Some(quote!(#[deprecated = #reason])),
+    }
+}
+
+/// Joins the non-empty parts as sentences, so a channel without a description still reads well.
+fn sentences(parts: &[&str]) -> String {
+    parts
+        .iter()
+        .map(|part| part.trim().trim_end_matches('.'))
+        .filter(|part| !part.is_empty())
+        .map(|part| format!("{part}."))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn joins_sentences_without_empty_parts() {
+        assert_eq!(
+            sentences(&["Position.", "", " Sent at 10 Hz "]),
+            "Position. Sent at 10 Hz."
+        );
+        assert_eq!(sentences(&["", ""]), "");
     }
 }
