@@ -347,10 +347,8 @@ fn check_keys(manifest: &Value) -> Result<(), String> {
     known_keys(
         &connection["mdnsTxt"]["properties"],
         "connection.mdnsTxt.properties",
-        &[
-            "protocol", // Ignored: informational.
-            "version",
-        ],
+        // Ignored: `version`, which is informational.
+        &["protocol", "version"],
     )?;
 
     for error in manifest["handshakeErrors"]["oneOf"]
