@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use socket_io::{
-    Addresses, Client, ConnectError, DisconnectReason, Event, Frame, Options, Responder, Waker,
+    Addresses, Backoff, Client, ConnectError, DisconnectReason, Event, Frame, Options, Responder,
+    Waker,
 };
 
 use crate::discovery;
@@ -173,9 +174,9 @@ impl Thread {
         // Latest frame per event, sent no faster than the event's rate limit.
         let mut pending: HashMap<&'static str, (&'static EventInfo, Frame)> = HashMap::new();
         let mut last_sent: HashMap<&'static str, Instant> = HashMap::new();
-        // When to rejoin after Simlink ends the source, and the next backoff.
+        // When to rejoin after Simlink ends the source.
         let mut rejoin_at: Option<Instant> = None;
-        let mut rejoin_backoff = MIN_BACKOFF;
+        let mut rejoin_backoff = Backoff::new(MIN_BACKOFF, MAX_BACKOFF);
         let mut connected_at = None;
 
         loop {
@@ -261,7 +262,7 @@ impl Thread {
                             self.listeners.state(ConnectionState::Searching);
                             // A Simlink that drops the source straight after joining keeps backing off.
                             if at.elapsed() >= MAX_BACKOFF {
-                                rejoin_backoff = MIN_BACKOFF;
+                                rejoin_backoff.reset();
                             }
                         }
                         None => log::debug!(
@@ -270,8 +271,7 @@ impl Thread {
                     }
                     // The client rejoins after every other reason.
                     if reason == DisconnectReason::ServerDisconnect {
-                        rejoin_at = Some(Instant::now() + rejoin_backoff);
-                        rejoin_backoff = (rejoin_backoff * 2).min(MAX_BACKOFF);
+                        rejoin_at = Some(Instant::now() + rejoin_backoff.duration());
                     }
                 }
                 Event::ConnectError(ConnectError::Refused { message, data }) => {
@@ -297,8 +297,7 @@ impl Thread {
                         self.wait_for_stop();
                         return;
                     }
-                    rejoin_at = Some(Instant::now() + rejoin_backoff);
-                    rejoin_backoff = (rejoin_backoff * 2).min(MAX_BACKOFF);
+                    rejoin_at = Some(Instant::now() + rejoin_backoff.duration());
                 }
                 Event::ConnectError(ConnectError::Transport(reason)) => {
                     log::debug!("Simlink not found: {reason}")

@@ -23,6 +23,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+pub use backoff::Backoff;
 pub use client::{Addresses, Client};
 pub use waker::Waker;
 

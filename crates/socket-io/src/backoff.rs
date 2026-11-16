@@ -7,6 +7,7 @@ use std::time::Duration;
 /// The reference `randomizationFactor`: how far each delay may stray either way, as a fraction of it.
 const JITTER: f64 = 0.5;
 
+/// Delays between attempts: doubling from `min` per attempt, capped at `max`, with jitter.
 pub struct Backoff {
     min: Duration,
     max: Duration,
