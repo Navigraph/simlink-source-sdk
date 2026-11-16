@@ -116,6 +116,7 @@ simlink_source_sdk::TelemetryOwnship ownship(double latitude, double longitude) 
     aircraft.attitude = {.bank = 0, .pitch = 2.5};
     aircraft.gforce = 1;
     aircraft.transponder = "7000";
+    aircraft.category = {.type = simlink_source_sdk::AircraftCategoryType::kPiston};
     return ownship;
 }
 
@@ -171,7 +172,8 @@ static TelemetryOwnship Ownship(double latitude, double longitude)
         VerticalSpeed: 0,
         TurnRate: 0,
         Gforce: 1,
-        Transponder: "7000");
+        Transponder: "7000",
+        Category: new AircraftCategory(Type: AircraftCategoryType.Piston, OperatorType: null));
     var simulation = new TelemetryOwnshipSimulation(Paused: false, Slew: false, Time: null);
 
     return new TelemetryOwnship(Aircraft: aircraft, Simulation: simulation);
@@ -236,6 +238,10 @@ fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnship {
             turn_rate: 0.0,
             gforce: 1.0,
             transponder: Some("7000".into()),
+            category: Some(AircraftCategory {
+                type_: AircraftCategoryType::Piston,
+                operator_type: None,
+            }),
         },
         simulation: TelemetryOwnshipSimulation {
             paused: false,

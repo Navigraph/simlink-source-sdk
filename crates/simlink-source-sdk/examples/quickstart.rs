@@ -52,6 +52,10 @@ fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnship {
             turn_rate: 0.0,
             gforce: 1.0,
             transponder: Some("7000".into()),
+            category: Some(AircraftCategory {
+                type_: AircraftCategoryType::Piston,
+                operator_type: None,
+            }),
         },
         simulation: TelemetryOwnshipSimulation {
             paused: false,

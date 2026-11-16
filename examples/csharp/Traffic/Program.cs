@@ -36,7 +36,7 @@ static TrafficPosition[] Traffic() =>
     new TrafficPosition(
         Key: "SEJKL",
         Aircraft: new TrafficPositionAircraft.Category(
-            CategoryValue: TrafficCategory.Helicopter,
+            CategoryValue: new AircraftCategory(Type: AircraftCategoryType.Helicopter, OperatorType: null),
             TypeValue: null,
             Callsign: null,
             Position: new Coordinates(Latitude: 59.64, Longitude: 17.90),

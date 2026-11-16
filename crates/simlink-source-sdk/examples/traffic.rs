@@ -81,7 +81,10 @@ fn traffic() -> Vec<TrafficPosition> {
         TrafficPosition {
             key: "SEJKL".into(),
             aircraft: TrafficPositionAircraft::Category {
-                category: TrafficCategory::Helicopter,
+                category: AircraftCategory {
+                    type_: AircraftCategoryType::Helicopter,
+                    operator_type: None,
+                },
                 type_: None,
                 callsign: None,
                 position: Coordinates {

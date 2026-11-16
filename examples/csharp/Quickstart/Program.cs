@@ -29,7 +29,8 @@ static TelemetryOwnship Ownship(double latitude, double longitude)
         VerticalSpeed: 0,
         TurnRate: 0,
         Gforce: 1,
-        Transponder: "7000");
+        Transponder: "7000",
+        Category: new AircraftCategory(Type: AircraftCategoryType.Piston, OperatorType: null));
     var simulation = new TelemetryOwnshipSimulation(Paused: false, Slew: false, Time: null);
 
     return new TelemetryOwnship(Aircraft: aircraft, Simulation: simulation);
