@@ -87,6 +87,9 @@
               "gforce": {
                 "type": "number",
                 "description": "G-force in g"
+              },
+              "category": {
+                "$ref": "#/$defs/AircraftCategory"
               }
             },
             "required": [
@@ -253,6 +256,37 @@
               "bank",
               "pitch"
             ]
+          },
+          "AircraftCategory": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "airliner",
+                  "jet",
+                  "turboprop",
+                  "piston",
+                  "glider",
+                  "helicopter",
+                  "other"
+                ],
+                "description": "Kind of aircraft"
+              },
+              "operator_type": {
+                "default": "civilian",
+                "description": "Whether the aircraft is civilian or military",
+                "type": "string",
+                "enum": [
+                  "civilian",
+                  "military"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "description": "Aircraft category"
           }
         }
       }
@@ -375,7 +409,7 @@
                       },
                       "category": {
                         "description": "Aircraft category when an exact type is unavailable",
-                        "$ref": "#/$defs/TrafficCategory"
+                        "$ref": "#/$defs/AircraftCategory"
                       }
                     },
                     "required": [
@@ -488,16 +522,36 @@
               }
             }
           },
-          "TrafficCategory": {
-            "type": "string",
-            "enum": [
-              "helicopter",
-              "helicopter_mil",
-              "fixed_wing",
-              "fixed_wing_mil",
-              "other"
+          "AircraftCategory": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "airliner",
+                  "jet",
+                  "turboprop",
+                  "piston",
+                  "glider",
+                  "helicopter",
+                  "other"
+                ],
+                "description": "Kind of aircraft"
+              },
+              "operator_type": {
+                "default": "civilian",
+                "description": "Whether the aircraft is civilian or military",
+                "type": "string",
+                "enum": [
+                  "civilian",
+                  "military"
+                ]
+              }
+            },
+            "required": [
+              "type"
             ],
-            "description": "Aircraft category used when an exact type is unavailable"
+            "description": "Aircraft category"
           }
         }
       }
