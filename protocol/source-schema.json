@@ -1,5 +1,5 @@
 {
-  "connection": {
+  "x-connection": {
     "protocolVersion": 1,
     "defaultPort": 5917,
     "portProbeLimit": 10,
@@ -33,1253 +33,1130 @@
     "errorChannel": "simlink:error",
     "authHeader": "auth"
   },
-  "events": {
-    "telemetry.ownship": {
-      "origin": "source",
-      "description": "Reports the source's current ownship state",
-      "maxRateHz": 10,
-      "payload": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "type": {
-            "default": "standard",
-            "type": "string",
-            "const": "standard",
-            "description": "Standard telemetry variant"
-          },
-          "aircraft": {
-            "type": "object",
-            "properties": {
-              "position": {
-                "$ref": "#/$defs/Coordinates"
-              },
-              "altitude": {
-                "$ref": "#/$defs/OwnshipAltitude"
-              },
-              "speed": {
-                "$ref": "#/$defs/OwnshipSpeed"
-              },
-              "vertical_speed": {
-                "type": "number",
-                "description": "Vertical speed in feet per minute"
-              },
-              "heading": {
-                "$ref": "#/$defs/OwnshipHeading"
-              },
-              "track": {
-                "$ref": "#/$defs/OwnshipTrack"
-              },
-              "attitude": {
-                "$ref": "#/$defs/OwnshipAttitude"
-              },
-              "turn_rate": {
-                "type": "number",
-                "description": "Turn rate in degrees per second"
-              },
-              "transponder": {
-                "default": "1200",
-                "type": "string",
-                "minLength": 4,
-                "maxLength": 4,
-                "description": "Four-character Mode A/C transponder code, e.g. \"1200\""
-              },
-              "gforce": {
-                "type": "number",
-                "description": "G-force in g"
-              },
-              "category": {
-                "$ref": "#/$defs/AircraftCategory"
-              }
-            },
-            "required": [
-              "position",
-              "altitude",
-              "speed",
-              "vertical_speed",
-              "heading",
-              "track",
-              "attitude",
-              "turn_rate",
-              "gforce"
-            ]
-          },
-          "simulation": {
-            "type": "object",
-            "properties": {
-              "paused": {
-                "type": "boolean",
-                "description": "Whether the simulator is paused"
-              },
-              "slew": {
-                "type": "boolean",
-                "description": "Whether the simulator is in slew or replay mode"
-              },
-              "time": {
-                "type": "object",
-                "properties": {
-                  "timestamp": {
-                    "type": "number",
-                    "description": "Current simulation time in seconds since the Unix epoch"
-                  },
-                  "tz_offset": {
-                    "type": "number",
-                    "description": "Timezone offset in seconds from UTC"
-                  }
-                },
-                "required": [
-                  "timestamp",
-                  "tz_offset"
-                ]
-              }
-            },
-            "required": [
-              "paused",
-              "slew"
-            ]
-          }
-        },
-        "required": [
-          "aircraft",
-          "simulation"
-        ],
-        "description": "Standard ownship state",
-        "$defs": {
-          "Coordinates": {
-            "type": "object",
-            "properties": {
-              "latitude": {
-                "type": "number",
-                "description": "Latitude in decimal degrees (WGS84)"
-              },
-              "longitude": {
-                "type": "number",
-                "description": "Longitude in decimal degrees (WGS84)"
-              }
-            },
-            "required": [
-              "latitude",
-              "longitude"
-            ],
-            "description": "Geographic coordinates in WGS84 decimal degrees"
-          },
-          "OwnshipAltitude": {
-            "type": "object",
-            "properties": {
-              "true": {
-                "type": "number",
-                "description": "True altitude in feet"
-              },
-              "agl": {
-                "type": "number",
-                "description": "Altitude above ground level in feet"
-              },
-              "indicated": {
-                "type": "number",
-                "description": "Indicated altitude in feet"
-              },
-              "pressure": {
-                "description": "Pressure altitude in feet",
-                "type": "number"
-              }
-            },
-            "required": [
-              "true",
-              "agl",
-              "indicated"
-            ]
-          },
-          "OwnshipSpeed": {
-            "type": "object",
-            "properties": {
-              "gs": {
-                "type": "number",
-                "description": "Ground speed in knots"
-              },
-              "ias": {
-                "type": "number",
-                "description": "Indicated airspeed in knots"
-              },
-              "tas": {
-                "type": "number",
-                "description": "True airspeed in knots"
-              }
-            },
-            "required": [
-              "gs",
-              "ias",
-              "tas"
-            ]
-          },
-          "OwnshipHeading": {
-            "type": "object",
-            "properties": {
-              "true": {
-                "type": "number",
-                "description": "True heading in degrees"
-              },
-              "magnetic": {
-                "type": "number",
-                "description": "Magnetic heading in degrees"
-              }
-            },
-            "required": [
-              "true",
-              "magnetic"
-            ]
-          },
-          "OwnshipTrack": {
-            "type": "object",
-            "properties": {
-              "true": {
-                "type": "number",
-                "description": "True track in degrees"
-              }
-            },
-            "required": [
-              "true"
-            ]
-          },
-          "OwnshipAttitude": {
-            "type": "object",
-            "properties": {
-              "bank": {
-                "type": "number",
-                "description": "Bank angle in degrees"
-              },
-              "pitch": {
-                "type": "number",
-                "description": "Pitch angle in degrees"
-              }
-            },
-            "required": [
-              "bank",
-              "pitch"
-            ]
-          },
-          "AircraftCategory": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "airliner",
-                  "jet",
-                  "turboprop",
-                  "piston",
-                  "glider",
-                  "helicopter",
-                  "other"
-                ],
-                "description": "Kind of aircraft"
-              },
-              "operator_type": {
-                "default": "civilian",
-                "description": "Whether the aircraft is civilian or military",
-                "type": "string",
-                "enum": [
-                  "civilian",
-                  "military"
-                ]
-              }
-            },
-            "required": [
-              "type"
-            ],
-            "description": "Aircraft category"
-          }
-        }
-      }
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "descriptor": {
+      "$ref": "#/$defs/SourceDescriptor"
     },
-    "telemetry.traffic": {
-      "origin": "source",
-      "description": "Reports the source's current traffic picture",
-      "maxRateHz": 1,
-      "payload": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/TrafficPosition"
-        },
-        "description": "Aircraft in the current traffic picture",
-        "$defs": {
-          "TrafficPosition": {
-            "type": "object",
-            "properties": {
-              "key": {
-                "type": "string",
-                "description": "Unique identifier for this aircraft within the source"
+    "handshakeErrors": {
+      "$ref": "#/$defs/HandshakeError"
+    },
+    "errorFrame": {
+      "$ref": "#/$defs/SourceErrorFrame"
+    },
+    "events": {
+      "type": "object",
+      "properties": {
+        "telemetry.ownship": {
+          "type": "object",
+          "properties": {
+            "payload": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "default": "standard",
+                  "type": "string",
+                  "const": "standard",
+                  "description": "Standard telemetry variant"
+                },
+                "aircraft": {
+                  "$ref": "#/$defs/OwnshipAircraft"
+                },
+                "simulation": {
+                  "$ref": "#/$defs/OwnshipSimulation"
+                }
               },
-              "aircraft": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "callsign": {
-                        "description": "Aircraft callsign, e.g. \"EZY0382\"",
-                        "type": "string"
-                      },
-                      "position": {
-                        "$ref": "#/$defs/Coordinates"
-                      },
-                      "altitude": {
-                        "$ref": "#/$defs/TrafficAltitude"
-                      },
-                      "speed": {
-                        "$ref": "#/$defs/TrafficSpeed"
-                      },
-                      "vertical_speed": {
-                        "description": "Vertical speed in feet per minute",
-                        "type": "number"
-                      },
-                      "heading": {
-                        "$ref": "#/$defs/TrafficHeading"
-                      },
-                      "attitude": {
-                        "$ref": "#/$defs/TrafficAttitude"
-                      },
-                      "transponder": {
-                        "default": "1200",
-                        "type": "string",
-                        "minLength": 4,
-                        "maxLength": 4,
-                        "description": "Four-character Mode A/C transponder code, e.g. \"1200\""
-                      },
-                      "identified_by": {
-                        "type": "string",
-                        "const": "type",
-                        "description": "Aircraft identified by ICAO type designator"
-                      },
-                      "type": {
-                        "type": "string",
-                        "description": "ICAO aircraft type designator, e.g. \"A320\""
-                      }
-                    },
-                    "required": [
-                      "position",
-                      "altitude",
-                      "speed",
-                      "heading",
-                      "attitude",
-                      "identified_by",
-                      "type"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "callsign": {
-                        "description": "Aircraft callsign, e.g. \"EZY0382\"",
-                        "type": "string"
-                      },
-                      "position": {
-                        "$ref": "#/$defs/Coordinates"
-                      },
-                      "altitude": {
-                        "$ref": "#/$defs/TrafficAltitude"
-                      },
-                      "speed": {
-                        "$ref": "#/$defs/TrafficSpeed"
-                      },
-                      "vertical_speed": {
-                        "description": "Vertical speed in feet per minute",
-                        "type": "number"
-                      },
-                      "heading": {
-                        "$ref": "#/$defs/TrafficHeading"
-                      },
-                      "attitude": {
-                        "$ref": "#/$defs/TrafficAttitude"
-                      },
-                      "transponder": {
-                        "default": "1200",
-                        "type": "string",
-                        "minLength": 4,
-                        "maxLength": 4,
-                        "description": "Four-character Mode A/C transponder code, e.g. \"1200\""
-                      },
-                      "identified_by": {
-                        "type": "string",
-                        "const": "category",
-                        "description": "Aircraft identified by category"
-                      },
-                      "type": {
-                        "description": "ICAO aircraft type designator, e.g. \"A320\"",
-                        "type": "string"
-                      },
-                      "category": {
-                        "description": "Aircraft category when an exact type is unavailable",
-                        "$ref": "#/$defs/AircraftCategory"
-                      }
-                    },
-                    "required": [
-                      "position",
-                      "altitude",
-                      "speed",
-                      "heading",
-                      "attitude",
-                      "identified_by",
-                      "category"
-                    ]
-                  }
-                ]
-              }
-            },
-            "required": [
-              "key",
-              "aircraft"
-            ],
-            "description": "Aircraft in a source traffic picture"
-          },
-          "Coordinates": {
-            "type": "object",
-            "properties": {
-              "latitude": {
-                "type": "number",
-                "description": "Latitude in decimal degrees (WGS84)"
-              },
-              "longitude": {
-                "type": "number",
-                "description": "Longitude in decimal degrees (WGS84)"
-              }
-            },
-            "required": [
-              "latitude",
-              "longitude"
-            ],
-            "description": "Geographic coordinates in WGS84 decimal degrees"
-          },
-          "TrafficAltitude": {
-            "type": "object",
-            "properties": {
-              "true": {
-                "type": "number",
-                "description": "True altitude in feet"
-              },
-              "agl": {
-                "description": "Altitude above ground level in feet",
-                "type": "number"
-              },
-              "indicated": {
-                "description": "Indicated altitude in feet",
-                "type": "number"
-              },
-              "pressure": {
-                "description": "Pressure altitude in feet",
-                "type": "number"
-              }
-            },
-            "required": [
-              "true"
-            ]
-          },
-          "TrafficSpeed": {
-            "type": "object",
-            "properties": {
-              "gs": {
-                "type": "number",
-                "description": "Ground speed in knots"
-              },
-              "ias": {
-                "description": "Indicated airspeed in knots",
-                "type": "number"
-              },
-              "tas": {
-                "description": "True airspeed in knots",
-                "type": "number"
-              }
-            },
-            "required": [
-              "gs"
-            ]
-          },
-          "TrafficHeading": {
-            "type": "object",
-            "properties": {
-              "true": {
-                "type": "number",
-                "description": "True heading in degrees"
-              },
-              "magnetic": {
-                "description": "Magnetic heading in degrees",
-                "type": "number"
-              }
-            },
-            "required": [
-              "true"
-            ]
-          },
-          "TrafficAttitude": {
-            "type": "object",
-            "properties": {
-              "bank": {
-                "description": "Bank angle in degrees",
-                "type": "number"
-              },
-              "pitch": {
-                "description": "Pitch angle in degrees",
-                "type": "number"
-              }
+              "required": [
+                "aircraft",
+                "simulation"
+              ],
+              "description": "Standard ownship state",
+              "title": "TelemetryOwnshipEvent"
             }
           },
-          "AircraftCategory": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "airliner",
-                  "jet",
-                  "turboprop",
-                  "piston",
-                  "glider",
-                  "helicopter",
-                  "other"
-                ],
-                "description": "Kind of aircraft"
+          "required": [
+            "payload"
+          ],
+          "additionalProperties": false,
+          "description": "Reports the source's current ownship state",
+          "x-origin": "source",
+          "x-max-rate-hz": 10
+        },
+        "telemetry.traffic": {
+          "type": "object",
+          "properties": {
+            "payload": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TrafficPosition"
               },
-              "operator_type": {
-                "default": "civilian",
-                "description": "Whether the aircraft is civilian or military",
-                "type": "string",
-                "enum": [
-                  "civilian",
-                  "military"
-                ]
-              }
-            },
-            "required": [
-              "type"
-            ],
-            "description": "Aircraft category"
-          }
+              "description": "Aircraft in the current traffic picture",
+              "title": "TelemetryTrafficEvent"
+            }
+          },
+          "required": [
+            "payload"
+          ],
+          "additionalProperties": false,
+          "description": "Reports the source's current traffic picture",
+          "x-origin": "source",
+          "x-max-rate-hz": 1
         }
-      }
+      },
+      "required": [
+        "telemetry.ownship",
+        "telemetry.traffic"
+      ],
+      "additionalProperties": false
+    },
+    "commands": {
+      "type": "object",
+      "properties": {
+        "atis.get": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "object",
+              "properties": {
+                "icao": {
+                  "type": "string",
+                  "minLength": 4,
+                  "maxLength": 4,
+                  "description": "ICAO airport code"
+                }
+              },
+              "required": [
+                "icao"
+              ],
+              "title": "AtisGetCommandInput"
+            },
+            "output": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AtisReport"
+              },
+              "description": "ATIS reports for the requested airport",
+              "title": "AtisGetCommandOutput"
+            },
+            "errors": {
+              "type": "string",
+              "const": "ATIS_NOT_AVAILABLE",
+              "description": "No ATIS data for the requested airport",
+              "title": "AtisGetCommandRefusal"
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "value": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/AtisReport"
+                      },
+                      "description": "ATIS reports for the requested airport"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": false
+                    },
+                    "error": {
+                      "type": "string",
+                      "const": "ATIS_NOT_AVAILABLE",
+                      "description": "No ATIS data for the requested airport"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ]
+                }
+              ],
+              "title": "AtisGetCommandResult"
+            }
+          },
+          "required": [
+            "input",
+            "output",
+            "errors",
+            "result"
+          ],
+          "additionalProperties": false,
+          "description": "Returns ATIS reports for an airport",
+          "x-origin": "source",
+          "x-timeout-ms": 2000
+        },
+        "flightplan.get": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "object",
+              "properties": {
+                "keys": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "TrafficPosition keys to query"
+                }
+              },
+              "required": [
+                "keys"
+              ],
+              "title": "FlightplanGetCommandInput"
+            },
+            "output": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/FlightPlan"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "description": "Flight plan by traffic key; null when unavailable",
+              "title": "FlightplanGetCommandOutput"
+            },
+            "errors": {
+              "type": "string",
+              "const": "FLIGHTPLAN_NOT_AVAILABLE",
+              "description": "No flight plans for the requested keys",
+              "title": "FlightplanGetCommandRefusal"
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "value": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/FlightPlan"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "description": "Flight plan by traffic key; null when unavailable"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": false
+                    },
+                    "error": {
+                      "type": "string",
+                      "const": "FLIGHTPLAN_NOT_AVAILABLE",
+                      "description": "No flight plans for the requested keys"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ]
+                }
+              ],
+              "title": "FlightplanGetCommandResult"
+            }
+          },
+          "required": [
+            "input",
+            "output",
+            "errors",
+            "result"
+          ],
+          "additionalProperties": false,
+          "description": "Returns flight plans for traffic keys",
+          "x-origin": "source",
+          "x-timeout-ms": 2000
+        }
+      },
+      "required": [
+        "atis.get",
+        "flightplan.get"
+      ],
+      "additionalProperties": false
     }
   },
-  "descriptor": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
-    "properties": {
-      "id": {
-        "type": "string",
-        "pattern": "^[a-z0-9-]+$",
-        "description": "Unique source identifier using lowercase letters, digits, and hyphens"
-      },
-      "displayName": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Source name shown to users"
-      },
-      "capabilities": {
-        "type": "object",
-        "properties": {
-          "events": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Event channels this source emits"
-          },
-          "commands": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Commands this source can answer"
-          }
+  "required": [
+    "descriptor",
+    "handshakeErrors",
+    "errorFrame",
+    "events",
+    "commands"
+  ],
+  "additionalProperties": false,
+  "title": "SourceProtocol",
+  "$defs": {
+    "SourceDescriptor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Unique source identifier using lowercase letters, digits, and hyphens"
         },
-        "required": [
-          "events",
-          "commands"
-        ],
-        "description": "Declared event and command capabilities"
-      }
-    },
-    "required": [
-      "id",
-      "displayName",
-      "capabilities"
-    ],
-    "description": "Source identity and capabilities"
-  },
-  "handshakeErrors": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "oneOf": [
-      {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "const": "HANDSHAKE_THIRD_PARTY_DISABLED",
-            "description": "The user has turned off third party source connections in Simlink"
-          }
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Source name shown to users"
         },
-        "required": [
-          "code"
-        ]
-      },
-      {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "const": "HANDSHAKE_IDENTIFICATION_INVALID",
-            "description": "The presented descriptor failed schema validation"
-          },
-          "metadata": {
-            "type": "object",
-            "properties": {
-              "issues": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "issues"
-            ]
-          }
-        },
-        "required": [
-          "code",
-          "metadata"
-        ]
-      },
-      {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "const": "HANDSHAKE_SOURCE_ID_IN_USE",
-            "description": "Another connected source already holds this id"
-          },
-          "metadata": {
-            "type": "object",
-            "properties": {
-              "sourceId": {
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
                 "type": "string"
-              }
+              },
+              "description": "Event channels this source emits"
             },
-            "required": [
-              "sourceId"
-            ]
-          }
-        },
-        "required": [
-          "code",
-          "metadata"
-        ]
-      }
-    ]
-  },
-  "errorFrame": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
-    "properties": {
-      "event": {
-        "type": "string",
-        "description": "Event or command that failed validation"
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Commands this source can answer"
+            }
+          },
+          "required": [
+            "events",
+            "commands"
+          ],
+          "description": "Declared event and command capabilities"
+        }
       },
-      "code": {
-        "type": "string",
-        "const": "INVALID_DATA"
-      },
-      "message": {
-        "type": "string"
-      },
-      "issues": {
-        "type": "array",
-        "items": {
+      "required": [
+        "id",
+        "displayName",
+        "capabilities"
+      ],
+      "description": "Source identity and capabilities"
+    },
+    "HandshakeError": {
+      "oneOf": [
+        {
           "type": "object",
           "properties": {
             "code": {
-              "type": "string"
+              "type": "string",
+              "const": "HANDSHAKE_THIRD_PARTY_DISABLED",
+              "description": "The user has turned off third party source connections in Simlink"
+            }
+          },
+          "required": [
+            "code"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "const": "HANDSHAKE_IDENTIFICATION_INVALID",
+              "description": "The presented descriptor failed schema validation"
             },
-            "message": {
-              "type": "string"
-            },
-            "path": {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  {
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "issues": {
+                  "type": "array",
+                  "items": {
                     "type": "string"
-                  },
-                  {
-                    "type": "number"
                   }
-                ]
-              }
+                }
+              },
+              "required": [
+                "issues"
+              ]
             }
           },
           "required": [
             "code",
-            "message",
-            "path"
+            "metadata"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "const": "HANDSHAKE_SOURCE_ID_IN_USE",
+              "description": "Another connected source already holds this id"
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sourceId"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "metadata"
           ]
         }
-      }
+      ]
     },
-    "required": [
-      "event",
-      "code"
-    ]
-  },
-  "commands": {
-    "atis.get": {
-      "origin": "source",
-      "description": "Returns ATIS reports for an airport",
-      "timeoutMs": 2000,
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "icao": {
-            "type": "string",
-            "minLength": 4,
-            "maxLength": 4,
-            "description": "ICAO airport code"
-          }
+    "SourceErrorFrame": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "description": "Event or command that failed validation"
         },
-        "required": [
-          "icao"
-        ]
-      },
-      "output": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/AtisReport"
+        "code": {
+          "type": "string",
+          "const": "INVALID_DATA"
         },
-        "description": "ATIS reports for the requested airport",
-        "$defs": {
-          "AtisReport": {
-            "type": "object",
-            "properties": {
-              "icao": {
-                "type": "string",
-                "minLength": 4,
-                "maxLength": 4,
-                "description": "Airport ICAO code"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "DEP",
-                  "ARR",
-                  "DEP/ARR"
-                ],
-                "description": "Departure, arrival, or combined report"
-              },
-              "letter": {
-                "description": "ATIS revision letter",
-                "type": "string"
-              },
-              "phonetic": {
-                "description": "Phonetic revision letter, e.g. \"Alpha\"",
-                "type": "string"
-              },
-              "message": {
-                "type": "string",
-                "description": "Full ATIS message text"
-              },
-              "dateIssued": {
-                "type": "string",
-                "format": "date-time",
-                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-                "description": "Issue time in ISO 8601 format"
-              },
-              "arrivingRunways": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Active arriving runway identifiers"
-              },
-              "departingRunways": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Active departing runway identifiers"
-              }
-            },
-            "required": [
-              "icao",
-              "type",
-              "message",
-              "dateIssued",
-              "arrivingRunways",
-              "departingRunways"
-            ],
-            "description": "ATIS report for an airport"
-          }
-        }
-      },
-      "errors": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "string",
-        "const": "ATIS_NOT_AVAILABLE",
-        "description": "No ATIS data for the requested airport"
-      },
-      "result": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "ok": {
-                "type": "boolean",
-                "const": true
-              },
-              "value": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/AtisReport"
-                },
-                "description": "ATIS reports for the requested airport"
-              }
-            },
-            "required": [
-              "ok",
-              "value"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "ok": {
-                "type": "boolean",
-                "const": false
-              },
-              "error": {
-                "type": "string",
-                "const": "ATIS_NOT_AVAILABLE",
-                "description": "No ATIS data for the requested airport"
-              }
-            },
-            "required": [
-              "ok",
-              "error"
-            ]
-          }
-        ],
-        "$defs": {
-          "AtisReport": {
-            "type": "object",
-            "properties": {
-              "icao": {
-                "type": "string",
-                "minLength": 4,
-                "maxLength": 4,
-                "description": "Airport ICAO code"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "DEP",
-                  "ARR",
-                  "DEP/ARR"
-                ],
-                "description": "Departure, arrival, or combined report"
-              },
-              "letter": {
-                "description": "ATIS revision letter",
-                "type": "string"
-              },
-              "phonetic": {
-                "description": "Phonetic revision letter, e.g. \"Alpha\"",
-                "type": "string"
-              },
-              "message": {
-                "type": "string",
-                "description": "Full ATIS message text"
-              },
-              "dateIssued": {
-                "type": "string",
-                "format": "date-time",
-                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-                "description": "Issue time in ISO 8601 format"
-              },
-              "arrivingRunways": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Active arriving runway identifiers"
-              },
-              "departingRunways": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Active departing runway identifiers"
-              }
-            },
-            "required": [
-              "icao",
-              "type",
-              "message",
-              "dateIssued",
-              "arrivingRunways",
-              "departingRunways"
-            ],
-            "description": "ATIS report for an airport"
-          }
-        }
-      }
-    },
-    "flightplan.get": {
-      "origin": "source",
-      "description": "Returns flight plans for traffic keys",
-      "timeoutMs": 2000,
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "keys": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "TrafficPosition keys to query"
-          }
-        },
-        "required": [
-          "keys"
-        ]
-      },
-      "output": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "propertyNames": {
+        "message": {
           "type": "string"
         },
-        "additionalProperties": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/FlightPlan"
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "path": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                }
+              }
             },
+            "required": [
+              "code",
+              "message",
+              "path"
+            ]
+          }
+        }
+      },
+      "required": [
+        "event",
+        "code"
+      ]
+    },
+    "OwnshipAircraft": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/Coordinates"
+        },
+        "altitude": {
+          "$ref": "#/$defs/OwnshipAltitude"
+        },
+        "speed": {
+          "$ref": "#/$defs/OwnshipSpeed"
+        },
+        "vertical_speed": {
+          "type": "number",
+          "description": "Vertical speed in feet per minute"
+        },
+        "heading": {
+          "$ref": "#/$defs/OwnshipHeading"
+        },
+        "track": {
+          "$ref": "#/$defs/OwnshipTrack"
+        },
+        "attitude": {
+          "$ref": "#/$defs/OwnshipAttitude"
+        },
+        "turn_rate": {
+          "type": "number",
+          "description": "Turn rate in degrees per second"
+        },
+        "transponder": {
+          "default": "1200",
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 4,
+          "description": "Four-character Mode A/C transponder code, e.g. \"1200\""
+        },
+        "gforce": {
+          "type": "number",
+          "description": "G-force in g"
+        },
+        "category": {
+          "$ref": "#/$defs/AircraftCategory"
+        }
+      },
+      "required": [
+        "position",
+        "altitude",
+        "speed",
+        "vertical_speed",
+        "heading",
+        "track",
+        "attitude",
+        "turn_rate",
+        "gforce"
+      ]
+    },
+    "Coordinates": {
+      "type": "object",
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "description": "Latitude in decimal degrees (WGS84)"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude in decimal degrees (WGS84)"
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "description": "Geographic coordinates in WGS84 decimal degrees"
+    },
+    "OwnshipAltitude": {
+      "type": "object",
+      "properties": {
+        "true": {
+          "type": "number",
+          "description": "True altitude in feet"
+        },
+        "agl": {
+          "type": "number",
+          "description": "Altitude above ground level in feet"
+        },
+        "indicated": {
+          "type": "number",
+          "description": "Indicated altitude in feet"
+        },
+        "pressure": {
+          "description": "Pressure altitude in feet",
+          "type": "number"
+        }
+      },
+      "required": [
+        "true",
+        "agl",
+        "indicated"
+      ]
+    },
+    "OwnshipSpeed": {
+      "type": "object",
+      "properties": {
+        "gs": {
+          "type": "number",
+          "description": "Ground speed in knots"
+        },
+        "ias": {
+          "type": "number",
+          "description": "Indicated airspeed in knots"
+        },
+        "tas": {
+          "type": "number",
+          "description": "True airspeed in knots"
+        }
+      },
+      "required": [
+        "gs",
+        "ias",
+        "tas"
+      ]
+    },
+    "OwnshipHeading": {
+      "type": "object",
+      "properties": {
+        "true": {
+          "type": "number",
+          "description": "True heading in degrees"
+        },
+        "magnetic": {
+          "type": "number",
+          "description": "Magnetic heading in degrees"
+        }
+      },
+      "required": [
+        "true",
+        "magnetic"
+      ]
+    },
+    "OwnshipTrack": {
+      "type": "object",
+      "properties": {
+        "true": {
+          "type": "number",
+          "description": "True track in degrees"
+        }
+      },
+      "required": [
+        "true"
+      ]
+    },
+    "OwnshipAttitude": {
+      "type": "object",
+      "properties": {
+        "bank": {
+          "type": "number",
+          "description": "Bank angle in degrees"
+        },
+        "pitch": {
+          "type": "number",
+          "description": "Pitch angle in degrees"
+        }
+      },
+      "required": [
+        "bank",
+        "pitch"
+      ]
+    },
+    "AircraftCategory": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/AircraftCategoryType"
+        },
+        "operator_type": {
+          "default": "civilian",
+          "allOf": [
             {
-              "type": "null"
+              "$ref": "#/$defs/AircraftCategoryOperatorType"
+            }
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "description": "Aircraft category"
+    },
+    "AircraftCategoryType": {
+      "type": "string",
+      "enum": [
+        "airliner",
+        "jet",
+        "turboprop",
+        "piston",
+        "glider",
+        "helicopter",
+        "other"
+      ],
+      "description": "Kind of aircraft"
+    },
+    "AircraftCategoryOperatorType": {
+      "type": "string",
+      "enum": [
+        "civilian",
+        "military"
+      ],
+      "description": "Whether the aircraft is civilian or military"
+    },
+    "OwnshipSimulation": {
+      "type": "object",
+      "properties": {
+        "paused": {
+          "type": "boolean",
+          "description": "Whether the simulator is paused"
+        },
+        "slew": {
+          "type": "boolean",
+          "description": "Whether the simulator is in slew or replay mode"
+        },
+        "time": {
+          "$ref": "#/$defs/SimulationTime"
+        }
+      },
+      "required": [
+        "paused",
+        "slew"
+      ]
+    },
+    "SimulationTime": {
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "type": "number",
+          "description": "Current simulation time in milliseconds since the Unix epoch"
+        },
+        "tz_offset": {
+          "type": "number",
+          "description": "Local time offset from UTC in seconds, e.g. 3600 for UTC+01:00"
+        }
+      },
+      "required": [
+        "timestamp",
+        "tz_offset"
+      ]
+    },
+    "TrafficPosition": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Unique identifier for this aircraft within the source"
+        },
+        "aircraft": {
+          "$ref": "#/$defs/TrafficAircraft"
+        }
+      },
+      "required": [
+        "key",
+        "aircraft"
+      ],
+      "description": "Aircraft in a source traffic picture"
+    },
+    "TrafficAircraft": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "callsign": {
+              "description": "Aircraft callsign, e.g. \"EZY0382\"",
+              "type": "string"
+            },
+            "position": {
+              "$ref": "#/$defs/Coordinates"
+            },
+            "altitude": {
+              "$ref": "#/$defs/TrafficAltitude"
+            },
+            "speed": {
+              "$ref": "#/$defs/TrafficSpeed"
+            },
+            "vertical_speed": {
+              "description": "Vertical speed in feet per minute",
+              "type": "number"
+            },
+            "heading": {
+              "$ref": "#/$defs/TrafficHeading"
+            },
+            "attitude": {
+              "$ref": "#/$defs/TrafficAttitude"
+            },
+            "transponder": {
+              "default": "1200",
+              "type": "string",
+              "minLength": 4,
+              "maxLength": 4,
+              "description": "Four-character Mode A/C transponder code, e.g. \"1200\""
+            },
+            "identified_by": {
+              "type": "string",
+              "const": "type",
+              "description": "Aircraft identified by ICAO type designator"
+            },
+            "type": {
+              "type": "string",
+              "description": "ICAO aircraft type designator, e.g. \"A320\""
+            }
+          },
+          "required": [
+            "position",
+            "altitude",
+            "speed",
+            "heading",
+            "attitude",
+            "identified_by",
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "callsign": {
+              "description": "Aircraft callsign, e.g. \"EZY0382\"",
+              "type": "string"
+            },
+            "position": {
+              "$ref": "#/$defs/Coordinates"
+            },
+            "altitude": {
+              "$ref": "#/$defs/TrafficAltitude"
+            },
+            "speed": {
+              "$ref": "#/$defs/TrafficSpeed"
+            },
+            "vertical_speed": {
+              "description": "Vertical speed in feet per minute",
+              "type": "number"
+            },
+            "heading": {
+              "$ref": "#/$defs/TrafficHeading"
+            },
+            "attitude": {
+              "$ref": "#/$defs/TrafficAttitude"
+            },
+            "transponder": {
+              "default": "1200",
+              "type": "string",
+              "minLength": 4,
+              "maxLength": 4,
+              "description": "Four-character Mode A/C transponder code, e.g. \"1200\""
+            },
+            "identified_by": {
+              "type": "string",
+              "const": "category",
+              "description": "Aircraft identified by category"
+            },
+            "type": {
+              "description": "ICAO aircraft type designator, e.g. \"A320\"",
+              "type": "string"
+            },
+            "category": {
+              "description": "Aircraft category when an exact type is unavailable",
+              "allOf": [
+                {
+                  "$ref": "#/$defs/AircraftCategory"
+                }
+              ]
+            }
+          },
+          "required": [
+            "position",
+            "altitude",
+            "speed",
+            "heading",
+            "attitude",
+            "identified_by",
+            "category"
+          ]
+        }
+      ]
+    },
+    "TrafficAltitude": {
+      "type": "object",
+      "properties": {
+        "true": {
+          "type": "number",
+          "description": "True altitude in feet"
+        },
+        "agl": {
+          "description": "Altitude above ground level in feet",
+          "type": "number"
+        },
+        "indicated": {
+          "description": "Indicated altitude in feet",
+          "type": "number"
+        },
+        "pressure": {
+          "description": "Pressure altitude in feet",
+          "type": "number"
+        }
+      },
+      "required": [
+        "true"
+      ]
+    },
+    "TrafficSpeed": {
+      "type": "object",
+      "properties": {
+        "gs": {
+          "type": "number",
+          "description": "Ground speed in knots"
+        },
+        "ias": {
+          "description": "Indicated airspeed in knots",
+          "type": "number"
+        },
+        "tas": {
+          "description": "True airspeed in knots",
+          "type": "number"
+        }
+      },
+      "required": [
+        "gs"
+      ]
+    },
+    "TrafficHeading": {
+      "type": "object",
+      "properties": {
+        "true": {
+          "type": "number",
+          "description": "True heading in degrees"
+        },
+        "magnetic": {
+          "description": "Magnetic heading in degrees",
+          "type": "number"
+        }
+      },
+      "required": [
+        "true"
+      ]
+    },
+    "TrafficAttitude": {
+      "type": "object",
+      "properties": {
+        "bank": {
+          "description": "Bank angle in degrees",
+          "type": "number"
+        },
+        "pitch": {
+          "description": "Pitch angle in degrees",
+          "type": "number"
+        }
+      }
+    },
+    "AtisReport": {
+      "type": "object",
+      "properties": {
+        "icao": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 4,
+          "description": "Airport ICAO code"
+        },
+        "type": {
+          "$ref": "#/$defs/AtisReportType"
+        },
+        "letter": {
+          "description": "ATIS revision letter",
+          "type": "string"
+        },
+        "phonetic": {
+          "description": "Phonetic revision letter, e.g. \"Alpha\"",
+          "type": "string"
+        },
+        "message": {
+          "type": "string",
+          "description": "Full ATIS message text"
+        },
+        "dateIssued": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+          "description": "Issue time in ISO 8601 format"
+        },
+        "arrivingRunways": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Active arriving runway identifiers"
+        },
+        "departingRunways": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Active departing runway identifiers"
+        }
+      },
+      "required": [
+        "icao",
+        "type",
+        "message",
+        "dateIssued",
+        "arrivingRunways",
+        "departingRunways"
+      ],
+      "description": "ATIS report for an airport"
+    },
+    "AtisReportType": {
+      "type": "string",
+      "enum": [
+        "DEP",
+        "ARR",
+        "DEP/ARR"
+      ],
+      "description": "Departure, arrival, or combined report"
+    },
+    "FlightPlan": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Aircraft key matching TrafficPosition.key"
+        },
+        "pilotName": {
+          "type": "string",
+          "description": "Pilot name"
+        },
+        "origin": {
+          "description": "Departure airport",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FlightPlanAirport"
             }
           ]
         },
-        "description": "Flight plan by traffic key; null when unavailable",
-        "$defs": {
-          "FlightPlan": {
-            "type": "object",
-            "properties": {
-              "key": {
-                "type": "string",
-                "description": "Aircraft key matching TrafficPosition.key"
-              },
-              "pilotName": {
-                "type": "string",
-                "description": "Pilot name"
-              },
-              "origin": {
-                "description": "Departure airport",
-                "$ref": "#/$defs/FlightPlanAirport"
-              },
-              "destination": {
-                "description": "Destination airport",
-                "$ref": "#/$defs/FlightPlanAirport"
-              },
-              "callsign": {
-                "type": "string",
-                "description": "Aircraft callsign, e.g. \"EZY0382\""
-              },
-              "aircraft": {
-                "type": "string",
-                "description": "ICAO aircraft type designator, e.g. \"A320\""
-              },
-              "route": {
-                "type": "string",
-                "description": "Flight route string, e.g. \"ESSA DCT KJFK\""
-              },
-              "stats": {
-                "type": "object",
-                "properties": {
-                  "depDist": {
-                    "description": "Distance from departure in nautical miles",
-                    "type": "number"
-                  },
-                  "toGoDist": {
-                    "description": "Distance remaining in nautical miles",
-                    "type": "number"
-                  },
-                  "eta": {
-                    "description": "Estimated time of arrival",
-                    "type": "string",
-                    "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-                  },
-                  "etd": {
-                    "description": "Estimated time of departure",
-                    "type": "string",
-                    "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-                  }
-                },
-                "description": "Flight progress"
-              },
-              "status": {
-                "description": "Current flight phase",
-                "$ref": "#/$defs/FlightPlanStatus"
-              }
-            },
-            "required": [
-              "key",
-              "pilotName",
-              "origin",
-              "destination",
-              "callsign",
-              "aircraft",
-              "route",
-              "stats",
-              "status"
-            ],
-            "description": "Flight plan for one aircraft"
-          },
-          "FlightPlanAirport": {
-            "type": "object",
-            "properties": {
-              "ident": {
-                "type": "string",
-                "description": "Airport ICAO code"
-              },
-              "coords": {
-                "description": "Airport coordinates",
-                "type": "object",
-                "properties": {
-                  "lat": {
-                    "type": "number",
-                    "description": "Latitude in decimal degrees (WGS84)"
-                  },
-                  "lon": {
-                    "type": "number",
-                    "description": "Longitude in decimal degrees (WGS84)"
-                  }
-                },
-                "required": [
-                  "lat",
-                  "lon"
-                ]
-              }
-            },
-            "required": [
-              "ident"
-            ],
-            "description": "Airport in a flight plan"
-          },
-          "FlightPlanStatus": {
-            "type": "string",
-            "enum": [
-              "originGate",
-              "originTaxi",
-              "departing",
-              "climbing",
-              "cruising",
-              "enroute",
-              "descending",
-              "arriving",
-              "destinationTaxi",
-              "destinationGate",
-              "scheduled",
-              "unknown"
-            ],
-            "description": "Flight phase"
-          }
+        "destination": {
+          "description": "Destination airport",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FlightPlanAirport"
+            }
+          ]
+        },
+        "callsign": {
+          "type": "string",
+          "description": "Aircraft callsign, e.g. \"EZY0382\""
+        },
+        "aircraft": {
+          "type": "string",
+          "description": "ICAO aircraft type designator, e.g. \"A320\""
+        },
+        "route": {
+          "type": "string",
+          "description": "Flight route string, e.g. \"ESSA DCT KJFK\""
+        },
+        "stats": {
+          "$ref": "#/$defs/FlightPlanStats"
+        },
+        "status": {
+          "description": "Current flight phase",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FlightPlanStatus"
+            }
+          ]
         }
       },
-      "errors": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "string",
-        "const": "FLIGHTPLAN_NOT_AVAILABLE",
-        "description": "No flight plans for the requested keys"
-      },
-      "result": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "ok": {
-                "type": "boolean",
-                "const": true
-              },
-              "value": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/$defs/FlightPlan"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "description": "Flight plan by traffic key; null when unavailable"
-              }
-            },
-            "required": [
-              "ok",
-              "value"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "ok": {
-                "type": "boolean",
-                "const": false
-              },
-              "error": {
-                "type": "string",
-                "const": "FLIGHTPLAN_NOT_AVAILABLE",
-                "description": "No flight plans for the requested keys"
-              }
-            },
-            "required": [
-              "ok",
-              "error"
-            ]
-          }
-        ],
-        "$defs": {
-          "FlightPlan": {
-            "type": "object",
-            "properties": {
-              "key": {
-                "type": "string",
-                "description": "Aircraft key matching TrafficPosition.key"
-              },
-              "pilotName": {
-                "type": "string",
-                "description": "Pilot name"
-              },
-              "origin": {
-                "description": "Departure airport",
-                "$ref": "#/$defs/FlightPlanAirport"
-              },
-              "destination": {
-                "description": "Destination airport",
-                "$ref": "#/$defs/FlightPlanAirport"
-              },
-              "callsign": {
-                "type": "string",
-                "description": "Aircraft callsign, e.g. \"EZY0382\""
-              },
-              "aircraft": {
-                "type": "string",
-                "description": "ICAO aircraft type designator, e.g. \"A320\""
-              },
-              "route": {
-                "type": "string",
-                "description": "Flight route string, e.g. \"ESSA DCT KJFK\""
-              },
-              "stats": {
-                "type": "object",
-                "properties": {
-                  "depDist": {
-                    "description": "Distance from departure in nautical miles",
-                    "type": "number"
-                  },
-                  "toGoDist": {
-                    "description": "Distance remaining in nautical miles",
-                    "type": "number"
-                  },
-                  "eta": {
-                    "description": "Estimated time of arrival",
-                    "type": "string",
-                    "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-                  },
-                  "etd": {
-                    "description": "Estimated time of departure",
-                    "type": "string",
-                    "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-                  }
-                },
-                "description": "Flight progress"
-              },
-              "status": {
-                "description": "Current flight phase",
-                "$ref": "#/$defs/FlightPlanStatus"
-              }
-            },
-            "required": [
-              "key",
-              "pilotName",
-              "origin",
-              "destination",
-              "callsign",
-              "aircraft",
-              "route",
-              "stats",
-              "status"
-            ],
-            "description": "Flight plan for one aircraft"
-          },
-          "FlightPlanAirport": {
-            "type": "object",
-            "properties": {
-              "ident": {
-                "type": "string",
-                "description": "Airport ICAO code"
-              },
-              "coords": {
-                "description": "Airport coordinates",
-                "type": "object",
-                "properties": {
-                  "lat": {
-                    "type": "number",
-                    "description": "Latitude in decimal degrees (WGS84)"
-                  },
-                  "lon": {
-                    "type": "number",
-                    "description": "Longitude in decimal degrees (WGS84)"
-                  }
-                },
-                "required": [
-                  "lat",
-                  "lon"
-                ]
-              }
-            },
-            "required": [
-              "ident"
-            ],
-            "description": "Airport in a flight plan"
-          },
-          "FlightPlanStatus": {
-            "type": "string",
-            "enum": [
-              "originGate",
-              "originTaxi",
-              "departing",
-              "climbing",
-              "cruising",
-              "enroute",
-              "descending",
-              "arriving",
-              "destinationTaxi",
-              "destinationGate",
-              "scheduled",
-              "unknown"
-            ],
-            "description": "Flight phase"
-          }
+      "required": [
+        "key",
+        "pilotName",
+        "origin",
+        "destination",
+        "callsign",
+        "aircraft",
+        "route",
+        "stats",
+        "status"
+      ],
+      "description": "Flight plan for one aircraft"
+    },
+    "AirportCoordinates": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude in decimal degrees (WGS84)"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude in decimal degrees (WGS84)"
         }
-      }
+      },
+      "required": [
+        "lat",
+        "lon"
+      ]
+    },
+    "FlightPlanAirport": {
+      "type": "object",
+      "properties": {
+        "ident": {
+          "type": "string",
+          "description": "Airport ICAO code"
+        },
+        "coords": {
+          "description": "Airport coordinates",
+          "allOf": [
+            {
+              "$ref": "#/$defs/AirportCoordinates"
+            }
+          ]
+        }
+      },
+      "required": [
+        "ident",
+        "coords"
+      ],
+      "description": "Airport in a flight plan"
+    },
+    "FlightPlanStats": {
+      "type": "object",
+      "properties": {
+        "depDist": {
+          "description": "Distance from departure in nautical miles",
+          "type": "number"
+        },
+        "toGoDist": {
+          "description": "Distance remaining in nautical miles",
+          "type": "number"
+        },
+        "eta": {
+          "description": "Estimated time of arrival",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "etd": {
+          "description": "Estimated time of departure",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        }
+      },
+      "description": "Flight progress"
+    },
+    "FlightPlanStatus": {
+      "type": "string",
+      "enum": [
+        "originGate",
+        "originTaxi",
+        "departing",
+        "climbing",
+        "cruising",
+        "enroute",
+        "descending",
+        "arriving",
+        "destinationTaxi",
+        "destinationGate",
+        "scheduled",
+        "unknown"
+      ],
+      "description": "Flight phase"
     }
   }
 }
