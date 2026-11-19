@@ -6,15 +6,16 @@ a pull request here whenever it changes. Don't edit it by hand: the next update 
 ## Reviewing an update
 
 The build catches most of an update. The `protocol!` macro generates the API from the manifest and fails on a key the
-SDK neither reads nor ignores on purpose, on handshake error metadata it can't map, and on a missing field the SDK
-reads by name. `crates/simlink-source-sdk/tests/schema.rs` fails until a new channel's types are listed, and CI runs
-every example against the fake Simlink and checks the README's snippets.
+SDK neither reads nor ignores on purpose, and on a missing field the SDK reads by name. The core builds the
+capabilities and parses error frames through generated types, so a change to either fails to compile.
+`crates/simlink-source-sdk/tests/schema.rs` fails until a new channel's types are listed, and CI runs every example
+against the fake Simlink and checks the README's snippets.
 
 What's left for the reviewer:
 
 - [ ] **Build failures.** Each macro error names what the SDK doesn't handle. An unhandled key is read in the macro,
-  or declared as an `Ignored` field with the reason. Anything else, such as a channel Simlink originates or
-  metadata the macro can't map, needs the SDK extended before the update can merge.
+  or declared as an `Ignored` field with the reason. Anything else, such as a channel Simlink originates, needs the
+  SDK extended before the update can merge.
 - [ ] **New channels.** List their types in `tests/schema.rs`.
 - [ ] **Generated names.** Run `cargo xtask build` and check new names in `target/bindings`. The C# generator renames
   some, such as `Error` to `Exception`, and a name can clash with one the SDK exports.
@@ -24,8 +25,8 @@ What's left for the reviewer:
   - `README.md`: "What it does", "Using it" and "Examples".
   - `docs/architecture.md`: what the macro generates, and the worker's handling of handshake errors.
   - `docs/overview.md`: the SDK's scope, if the update changes what it covers.
-- [ ] **New handshake errors.** Decide whether the source should keep retrying. Only `IdentificationInvalid` stops it,
-  in `crates/simlink-source-sdk/src/worker.rs`.
+- [ ] **New handshake errors.** Decide whether the source should keep retrying. Only `HandshakeIdentificationInvalid`
+  stops it, in `crates/simlink-source-sdk/src/worker.rs`.
 - [ ] **Breaking changes.** A renamed or removed channel, field or code, or a new required descriptor field, breaks
   integrators' code. Bump the version to match, and say so in the release notes.
 - [ ] **A new `protocolVersion`.** Discovery then only finds Simlinks serving that major, so release it as a breaking

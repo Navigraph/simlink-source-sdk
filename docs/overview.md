@@ -156,8 +156,8 @@ All of them come out of `cargo xtask package` and the release workflow; see [dev
 
 A workflow in the Simlink repository opens a PR here whenever the schema changes. The generated types and methods
 update automatically. `crates/simlink-source-sdk/tests/schema.rs` lists the Rust type for every event payload and
-command input, output and error, and round-trips a sample of each. It also compares that list against the channels in
-the schema, so a new channel fails the test until its types are added. Merge, release, and integrators pick up the
+command input, output and refusal, and round-trips a sample of each. It also compares that list against the channels
+in the schema, so a new channel fails the test until its types are added. Merge, release, and integrators pick up the
 new version.
 
 ### Adding a language
