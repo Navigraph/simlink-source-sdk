@@ -1,9 +1,10 @@
 [package]
 name = "simlink-source-sdk-macros"
-description = "protocol! macro that turns Simlink's source manifest into the SDK's protocol API"
+description = "The protocol! macro internal to simlink-source-sdk, not for use on its own"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 
 [lib]

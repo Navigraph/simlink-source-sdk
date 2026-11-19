@@ -4,6 +4,8 @@ description = "Connects a flight simulator data source to Navigraph Simlink"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
 rust-version.workspace = true
 
 [lib]

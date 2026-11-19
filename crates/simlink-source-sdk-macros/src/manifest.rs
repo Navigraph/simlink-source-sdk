@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn rejects_manifest_keys_the_sdk_does_not_handle() {
-        let text = include_str!("../../../protocol/source-schema.json");
+        let text = include_str!("../../simlink-source-sdk/protocol/source-schema.json");
         assert!(read(text).is_ok());
 
         let manifest: Value = serde_json::from_str(text).unwrap();

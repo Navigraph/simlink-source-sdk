@@ -62,11 +62,12 @@ Watch for collisions: `Error` is exported as `SimlinkError`, since the C# genera
 
 ### Protocol updates
 
-`protocol/source-schema.json` arrives as pull requests from the Simlink repository. Don't edit it by hand.
+`crates/simlink-source-sdk/protocol/source-schema.json` arrives as pull requests from the Simlink repository. Don't
+edit it by hand.
 
 The types and `Source` methods follow the manifest on the next build, and the macro fails the build on any key it
-neither reads nor ignores on purpose. `protocol/README.md` has the checklist for reviewing an update: what the build
-catches, and what it can't.
+neither reads nor ignores on purpose. `protocol/README.md` next to it has the checklist for reviewing an update: what
+the build catches, and what it can't.
 
 ### Updating UniFFI or a generator
 
@@ -101,9 +102,9 @@ the build until the step is updated. The `Dockerfile` follows the Linux runner's
 The tests trust what is generated and check what is hand-written:
 
 - **The generated types match the manifest.** `crates/simlink-source-sdk/tests/schema.rs` builds samples of every
-  channel's payloads and the handshake descriptor from `protocol/source-schema.json`, round-trips them through the
-  Rust types, and checks the JSON comes back the same and still valid. A channel added to the manifest fails the test
-  until its types are listed.
+  channel's payloads and the handshake descriptor from the manifest, round-trips them through the Rust types, and
+  checks the JSON comes back the same and still valid. A channel added to the manifest fails the test until its types
+  are listed.
 - **The Socket.IO client follows the protocol and the reference client.** In
   `crates/simlink-source-sdk/src/socket_io`, `tests/protocol.rs` ports the official [Engine.IO](https://github.com/socketio/engine.io-protocol) and
   [Socket.IO](https://github.com/socketio/socket.io-protocol) test suites to the client's side: a scripted server

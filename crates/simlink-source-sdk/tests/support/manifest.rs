@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use serde_json::{Map, Value, json};
 
 pub static MANIFEST: LazyLock<Value> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../../../../protocol/source-schema.json")).unwrap()
+    serde_json::from_str(include_str!("../../protocol/source-schema.json")).unwrap()
 });
 
 /// The schema of the protocol's `part`, such as `descriptor` or `events/telemetry.ownship/payload`, with the

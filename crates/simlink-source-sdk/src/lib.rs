@@ -14,7 +14,7 @@ mod worker;
 
 /// Protocol types and typed channel methods, generated from Simlink's source manifest.
 pub mod protocol {
-    simlink_source_sdk_macros::protocol!("../../protocol/source-schema.json");
+    simlink_source_sdk_macros::protocol!("protocol/source-schema.json");
 }
 
 pub use logging::*;

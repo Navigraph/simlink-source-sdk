@@ -53,7 +53,7 @@ Both are exposed to each language through bindings. We could maintain the bindin
 the Rust code and become a maintenance issue, so they're generated automatically too.
 
 ```
-protocol/source-schema.json   synced from the Simlink repo by a PR whenever it changes
+source-schema.json            synced from the Simlink repo by a PR whenever it changes
   └─ protocol!() macro        generates the protocol types and typed methods per channel
        └─ Rust core           connection, discovery, rate limiting, commands
             ├─ UniFFI + uniffi-bindgen-cpp  →  C++ bindings
