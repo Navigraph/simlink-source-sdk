@@ -329,7 +329,7 @@ fn sends_the_latest_payload_at_the_rate_limit() {
 }
 
 #[test]
-fn rejoins_after_being_removed_from_the_namespace() {
+fn rejoins_after_losing_the_namespace_or_the_connection() {
     let server = Server::start();
     let source = source(&server, vec![]);
     let states = states(&source);
@@ -346,21 +346,16 @@ fn rejoins_after_being_removed_from_the_namespace() {
     // Only the namespace goes; the source must act on the leave itself.
     server.leave_all();
     wait_for_state(&states, searching);
-    server.wait_for_join(WAIT).expect("the source joins again");
-}
-
-#[test]
-fn reconnects_after_simlink_closes_the_connection() {
-    let server = Server::start();
-    let source = source(&server, vec![]);
-    let states = states(&source);
-    source.start().unwrap();
-
-    server.wait_for_join(WAIT).expect("the source joins");
+    server
+        .wait_for_join(WAIT)
+        .expect("the source joins after leaving");
     wait_for_state(&states, connected);
+
     server.close_all();
     wait_for_state(&states, searching);
-    server.wait_for_join(WAIT).expect("the source joins again");
+    server
+        .wait_for_join(WAIT)
+        .expect("the source joins after the connection closes");
 }
 
 #[test]
@@ -421,13 +416,15 @@ fn drops_promptly_while_searching() {
 }
 
 #[test]
-fn retries_a_refusal_that_can_clear() {
+fn retries_refusals_that_can_clear_and_drops_emits_meanwhile() {
     let server = Server::start();
     server.refuse_next_join(refusal(json!({
         "code": "HANDSHAKE_SOURCE_ID_IN_USE",
         "metadata": { "sourceId": "test" },
     })));
-    let source = source(&server, vec![]);
+    // From a newer Simlink.
+    server.refuse_next_join(json!({ "code": "HANDSHAKE_FROM_A_NEWER_SIMLINK" }));
+    let source = source(&server, vec![Event::TelemetryOwnship]);
     let states = states(&source);
     source.start().unwrap();
 
@@ -442,19 +439,7 @@ fn retries_a_refusal_that_can_clear() {
             retrying: true,
         }
     );
-    server
-        .wait_for_join(WAIT)
-        .expect("the source joins on its next attempt");
-}
-
-#[test]
-fn retries_a_refusal_newer_than_the_sdk() {
-    let server = Server::start();
-    server.refuse_next_join(json!({ "code": "HANDSHAKE_FROM_A_NEWER_SIMLINK" }));
-    let source = source(&server, vec![]);
-    let states = states(&source);
-    source.start().unwrap();
-
+    source.emit_telemetry_ownship(ownship(1.0)).unwrap();
     assert_eq!(
         wait_for_state(&states, rejected),
         ConnectionState::Rejected {
@@ -464,24 +449,6 @@ fn retries_a_refusal_newer_than_the_sdk() {
             retrying: true,
         }
     );
-    server
-        .wait_for_join(WAIT)
-        .expect("the source joins on its next attempt");
-}
-
-#[test]
-fn drops_emits_while_disconnected() {
-    let server = Server::start();
-    server.refuse_next_join(refusal(json!({
-        "code": "HANDSHAKE_SOURCE_ID_IN_USE",
-        "metadata": { "sourceId": "test" },
-    })));
-    let source = source(&server, vec![Event::TelemetryOwnship]);
-    let states = states(&source);
-    source.start().unwrap();
-
-    wait_for_state(&states, rejected);
-    source.emit_telemetry_ownship(ownship(1.0)).unwrap();
     wait_for_state(&states, connected);
     assert!(
         server
