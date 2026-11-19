@@ -9,14 +9,11 @@
 //! [engine.io-protocol]: https://github.com/socketio/engine.io-protocol/blob/f21de7b/test-suite/test-suite.js
 //! [socket.io-protocol]: https://github.com/socketio/socket.io-protocol/blob/4f633dd/test-suite/test-suite.js
 
-mod support;
-
 use std::time::{Duration, Instant};
 
 use serde_json::json;
-// The `socket_io` module below shadows the crate.
-use ::socket_io::{ConnectError, DisconnectReason, Event, Frame};
-use support::*;
+use crate::socket_io::{ConnectError, DisconnectReason, Event, Frame};
+use super::support::{self, *};
 
 /// Expects the client to close the connection over `frame`.
 fn assert_rejects(frame: &'static str) {

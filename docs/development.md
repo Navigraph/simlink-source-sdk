@@ -104,8 +104,8 @@ The tests trust what is generated and check what is hand-written:
   channel's payloads and the handshake descriptor from `protocol/source-schema.json`, round-trips them through the
   Rust types, and checks the JSON comes back the same and still valid. A channel added to the manifest fails the test
   until its types are listed.
-- **The Socket.IO client follows the protocol and the reference client.** In `crates/socket-io`,
-  `tests/protocol.rs` ports the official [Engine.IO](https://github.com/socketio/engine.io-protocol) and
+- **The Socket.IO client follows the protocol and the reference client.** In
+  `crates/simlink-source-sdk/src/socket_io`, `tests/protocol.rs` ports the official [Engine.IO](https://github.com/socketio/engine.io-protocol) and
   [Socket.IO](https://github.com/socketio/socket.io-protocol) test suites to the client's side: a scripted server
   sends the reference server's frames and checks the client's replies, and each test links the one it ports.
   `tests/client.rs` checks reconnection and the namespace's lifecycle against what socket.io-client does.

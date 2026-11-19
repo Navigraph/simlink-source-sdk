@@ -18,6 +18,9 @@ mod engine;
 mod waker;
 mod wire;
 
+#[cfg(test)]
+mod tests;
+
 use std::net::SocketAddr;
 use std::time::Duration;
 

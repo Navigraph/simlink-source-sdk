@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde_json::{Value, json};
-use socket_io::{
+use crate::socket_io::{
     Addresses, Backoff, Client, ConnectError, DisconnectReason, Event, Frame, Options, Responder,
     Waker,
 };

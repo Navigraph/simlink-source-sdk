@@ -1,12 +1,10 @@
 //! Behavior beyond the protocol, after socket.io-client's `Manager` and `Socket`. Each test names what it checks.
 
-mod support;
-
 use std::time::{Duration, Instant};
 
 use serde_json::json;
-use socket_io::{Client, ConnectError, DisconnectReason, Event, Frame, Options};
-use support::*;
+use crate::socket_io::{Client, ConnectError, DisconnectReason, Event, Frame, Options};
+use super::support::{self, *};
 
 fn event(name: &str) -> Frame {
     Frame::event(NS, name, vec![]).unwrap()

@@ -8,11 +8,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
 
-use crate::backoff::Backoff;
-use crate::engine::{Connection, Read};
-use crate::waker::{Signal, Waker};
-use crate::wire::{self, Inbound};
-use crate::{ConnectError, DisconnectReason, Event, Frame, Options, Responder};
+use super::backoff::Backoff;
+use super::engine::{Connection, Read};
+use super::waker::{Signal, Waker};
+use super::wire::{self, Inbound};
+use super::{ConnectError, DisconnectReason, Event, Frame, Options, Responder};
 
 /// Where to look on each attempt, pulled lazily, only as far as needed.
 pub type Addresses = Box<dyn Iterator<Item = SocketAddr> + Send>;

@@ -9,7 +9,6 @@ How the SDK is put together, from the protocol manifest to the C++ and C# packag
 protocol/source-schema.json        Simlink's source manifest, synced from the Simlink repository
 crates/
   simlink-source-sdk-macros/       protocol!(): the manifest as Rust types and Source methods
-  socket-io/                       the Socket.IO client: one namespace, JSON, reconnection
   simlink-source-sdk/
     src/
       lib.rs                       UniFFI setup; expands protocol!()
@@ -17,6 +16,7 @@ crates/
       worker.rs                    the SDK thread: join, emit, answer, reconnect
       discovery.rs                 loopback port probing and mDNS
       logging.rs                   `log` records to a foreign listener
+      socket_io/                   the Socket.IO client: one namespace, JSON, reconnection
     tests/                         schema, connection and example tests, and a fake Simlink
     examples/                      Rust examples
 bindings/
@@ -120,9 +120,11 @@ or an emit or rejoin is due.
 
 ### The Socket.IO client
 
-`crates/socket-io` is a Socket.IO v5 client over Engine.IO v4, websocket transport only, joined to one namespace.
-It's ours because no Rust client answers server-initiated acks, which is how Simlink sends commands. It knows nothing
-about Simlink; the core passes it the path, namespace, handshake payload and addresses to try.
+`src/socket_io` is a Socket.IO v5 client over Engine.IO v4, websocket transport only, joined to one namespace.
+It's ours because no Rust client answers server-initiated acks, which is how Simlink sends commands. It's a private
+module rather than its own crate, so nobody comes to depend on it, but it stays separate from the rest: it uses
+nothing else in the crate and knows nothing about Simlink. The core passes it the path, namespace, handshake payload
+and addresses to try.
 
 It follows the [Socket.IO](https://github.com/socketio/socket.io-protocol) and
 [Engine.IO](https://github.com/socketio/engine.io-protocol) specs, and the reference client, socket.io-client, where
@@ -150,8 +152,8 @@ SDK thread stays responsive.
 - A server that sends no ping within `pingInterval + pingTimeout` counts as lost, whatever else it sends.
 - Answers to an event from an earlier connection are dropped, since ack ids start over with each connection. The
   reference client sends them anyway.
-- `tests/protocol.rs` ports the official protocol test suites to the client's side, and `tests/client.rs` checks the
-  reference client's behavior.
+- `socket_io/tests/protocol.rs` ports the official protocol test suites to the client's side, and
+  `socket_io/tests/client.rs` checks the reference client's behavior.
 
 ### Foreign code
 

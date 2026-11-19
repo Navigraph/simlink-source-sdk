@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use polling::{Events, Poller};
 
-/// Wakes [`Client::poll`](crate::Client::poll) from another thread, such as one with something to send.
+/// Wakes [`Client::poll`](super::Client::poll) from another thread, such as one with something to send.
 #[derive(Clone)]
-pub struct Waker(pub(crate) Arc<Signal>);
+pub struct Waker(pub(super) Arc<Signal>);
 
 impl Waker {
     pub fn wake(&self) {
@@ -21,7 +21,7 @@ impl Waker {
 }
 
 /// The client's poller, which the connection's socket is registered with, and whether a [`Waker`] fired.
-pub(crate) struct Signal {
+pub(super) struct Signal {
     pub poller: Poller,
     woken: AtomicBool,
 }

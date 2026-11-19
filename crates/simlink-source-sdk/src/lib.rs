@@ -8,6 +8,7 @@ uniffi::setup_scaffolding!();
 
 mod discovery;
 mod logging;
+mod socket_io;
 mod source;
 mod worker;
 

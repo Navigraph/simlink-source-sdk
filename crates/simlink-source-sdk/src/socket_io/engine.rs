@@ -11,9 +11,9 @@ use tungstenite::error::ProtocolError;
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
-use crate::DisconnectReason;
-use crate::waker::Signal;
-use crate::wire::{self, Decoder, Engine, Inbound};
+use super::DisconnectReason;
+use super::waker::Signal;
+use super::wire::{self, Decoder, Engine, Inbound};
 
 const NO_OPEN: &str = "no Engine.IO open packet";
 const CLOSE_TIMEOUT: Duration = Duration::from_millis(500);
@@ -131,7 +131,7 @@ impl Connection {
     /// Blocks until the socket has something to read, or room to write while backlogged, a [`Waker`] fires, the ping
     /// deadline passes, or `until`.
     ///
-    /// [`Waker`]: crate::Waker
+    /// [`Waker`]: super::Waker
     pub fn wait(&self, until: Option<Instant>) {
         let until = until.map_or(self.alive_until, |until| until.min(self.alive_until));
         self.wait_for(Interest::new(SOCKET, true, self.backlogged), Some(until));
