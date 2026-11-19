@@ -18,8 +18,7 @@ pub fn generate(manifest: &Manifest) -> TokenStream {
     } = &manifest.connection;
     let (socket_io_path, max_payload_bytes) = (&socket_io.path, socket_io.max_payload_bytes);
 
-    let events = manifest.events.iter().map(|event| {
-        let name = &event.channel.name;
+    let events = manifest.events.iter().map(|(name, event)| {
         let rate = match event.max_rate_hz {
             Some(rate) => quote!(Some(#rate)),
             None => quote!(None),

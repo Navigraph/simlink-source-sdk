@@ -4,7 +4,7 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::manifest::{Channel, Manifest};
+use crate::manifest::Manifest;
 use crate::types::Types;
 use heck::{ToSnakeCase, ToUpperCamelCase};
 
@@ -13,12 +13,8 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
         .events
         .iter()
         .zip(&types.payloads)
-        .map(|(event, payload)| {
-            let Channel {
-                name,
-                doc,
-                deprecated,
-            } = &event.channel;
+        .map(|((name, event), payload)| {
+            let doc = &event.description;
             let variant = format_ident!("{}", name.to_upper_camel_case());
             let method = format_ident!("emit_{}", name.to_snake_case());
             let rate = event
@@ -26,7 +22,7 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
                 .map(|rate| format!("Sent at most {rate} Hz; the latest payload wins."))
                 .unwrap_or_default();
             let method_doc = sentences(&[doc, &rate]);
-            let deprecated = self::deprecated(deprecated);
+            let deprecated = deprecated(&event.deprecation);
             (
                 quote!(#[doc = #doc] #deprecated #variant),
                 quote! {
@@ -41,12 +37,8 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
         .unzip();
 
     let commands = manifest.commands.iter().zip(&types.commands).map(
-        |(command, [input, output, refusal])| {
-            let Channel {
-                name,
-                doc,
-                deprecated,
-            } = &command.channel;
+        |((name, command), [input, output, refusal])| {
+            let doc = &command.description;
             let base = name.to_upper_camel_case();
             let (handler, reply) = (format_ident!("{base}Handler"), format_ident!("{base}Reply"));
             let method = format_ident!("on_{}", name.to_snake_case());
@@ -60,7 +52,7 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
             let reply_doc = format!(
                 "Answers one `{name}` command. Dropping it unanswered lets the command time out."
             );
-            let deprecated = self::deprecated(deprecated);
+            let deprecated = deprecated(&command.deprecation);
             quote! {
                 #[doc = #handler_doc]
                 #[::uniffi::export(with_foreign)]
@@ -140,8 +132,7 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
 fn channel(manifest: &Manifest) -> TokenStream {
     let (variants, reads, names): (Vec<_>, Vec<_>, Vec<_>) = manifest
         .channels()
-        .map(|channel| {
-            let (name, doc) = (&channel.name, &channel.doc);
+        .map(|(name, doc)| {
             let variant = format_ident!("{}", name.to_upper_camel_case());
             (
                 quote!(#[doc = #doc] #variant),

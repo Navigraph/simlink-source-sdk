@@ -4,26 +4,53 @@ use std::collections::BTreeMap;
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
-pub struct Channel {
-    pub name: String,
-    pub doc: String,
-    pub deprecated: Option<String>,
+#[derive(Deserialize)]
+pub struct Event {
+    #[serde(rename = "x-origin")]
+    _origin: Origin,
+    #[serde(default)]
+    pub description: String,
+    /// `x-deprecation` says the same, with the reason.
+    #[serde(rename = "deprecated")]
+    _deprecated: Ignored,
+    #[serde(rename = "x-deprecation")]
+    pub deprecation: Option<String>,
+    #[serde(rename = "x-max-rate-hz")]
+    pub max_rate_hz: Option<f64>,
+    pub properties: EventParts,
 }
 
-pub struct Event {
-    pub channel: Channel,
-    pub max_rate_hz: Option<f64>,
+#[derive(Deserialize)]
+pub struct EventParts {
     pub payload: Value,
 }
 
+#[derive(Deserialize)]
 pub struct Command {
-    pub channel: Channel,
+    #[serde(rename = "x-origin")]
+    _origin: Origin,
+    #[serde(default)]
+    pub description: String,
+    /// `x-deprecation` says the same, with the reason.
+    #[serde(rename = "deprecated")]
+    _deprecated: Ignored,
+    #[serde(rename = "x-deprecation")]
+    pub deprecation: Option<String>,
+    #[serde(rename = "x-timeout-ms")]
     pub timeout_ms: u64,
+    pub properties: CommandParts,
+}
+
+#[derive(Deserialize)]
+pub struct CommandParts {
     pub input: Value,
     pub output: Value,
-    pub refusal: Value,
+    pub errors: Value,
+    /// The reply envelope, which the SDK writes and the tests check replies against.
+    #[serde(rename = "result")]
+    _result: Ignored,
 }
 
 /// What the SDK connects with.
@@ -59,22 +86,30 @@ pub struct SocketIo {
 pub struct Manifest {
     /// The descriptor's identity part, which integrators fill in.
     pub options: Value,
-    pub handshake_error: Value,
+    pub handshake_errors: Value,
     /// The descriptor's capabilities, which the SDK declares.
     pub capabilities: Value,
     pub error_frame: Value,
-    pub events: Vec<Event>,
-    pub commands: Vec<Command>,
+    /// By channel name.
+    pub events: BTreeMap<String, Event>,
+    pub commands: BTreeMap<String, Command>,
     pub connection: Connection,
     /// The types every schema above refers to by `#/$defs/<name>`.
     pub defs: Map<String, Value>,
 }
 
 impl Manifest {
-    /// Every event, then every command.
-    pub fn channels(&self) -> impl Iterator<Item = &Channel> {
-        let events = self.events.iter().map(|event| &event.channel);
-        events.chain(self.commands.iter().map(|command| &command.channel))
+    /// The name and description of every event, then every command.
+    pub fn channels(&self) -> impl Iterator<Item = (&String, &String)> {
+        let events = self
+            .events
+            .iter()
+            .map(|(name, event)| (name, &event.description));
+        events.chain(
+            self.commands
+                .iter()
+                .map(|(name, command)| (name, &command.description)),
+        )
     }
 }
 
@@ -94,12 +129,12 @@ pub fn read(text: &str) -> Result<Manifest, String> {
     } = descriptor.read(&root.defs)?;
 
     Ok(Manifest {
-        options: options.schema(&root.defs)?,
-        handshake_error: handshake_errors.schema(&root.defs)?,
-        capabilities: capabilities.properties.capabilities.schema(&root.defs)?,
-        error_frame: error_frame.schema(&root.defs)?,
-        events: events.properties.into_iter().map(Event::from).collect(),
-        commands: commands.properties.into_iter().map(Command::from).collect(),
+        options,
+        handshake_errors,
+        capabilities: capabilities.properties.capabilities,
+        error_frame,
+        events: events.properties,
+        commands: commands.properties,
         connection: root.connection,
         defs: root.defs,
     })
@@ -118,10 +153,10 @@ struct Root {
 #[serde(rename_all = "camelCase")]
 struct Protocol {
     descriptor: Ref,
-    handshake_errors: Ref,
-    error_frame: Ref,
-    events: Object<BTreeMap<String, EventEntry>>,
-    commands: Object<BTreeMap<String, CommandEntry>>,
+    handshake_errors: Value,
+    error_frame: Value,
+    events: Object<BTreeMap<String, Event>>,
+    commands: Object<BTreeMap<String, Command>>,
 }
 
 #[derive(Deserialize)]
@@ -131,23 +166,15 @@ struct Ref {
 }
 
 impl Ref {
-    fn resolve<'a>(&self, defs: &'a Map<String, Value>) -> Result<&'a Value, String> {
-        self.path
-            .strip_prefix("#/$defs/")
-            .and_then(|name| defs.get(name))
-            .ok_or(format!("{} is missing", self.path))
-    }
-
-    /// A schema of just this reference, once it resolves.
-    fn schema(&self, defs: &Map<String, Value>) -> Result<Value, String> {
-        self.resolve(defs)?;
-        Ok(json!({ "$ref": self.path }))
-    }
-
     /// The definition, read as `T`.
     fn read<T: DeserializeOwned>(&self, defs: &Map<String, Value>) -> Result<T, String> {
+        let definition = self
+            .path
+            .strip_prefix("#/$defs/")
+            .and_then(|name| defs.get(name))
+            .ok_or(format!("{} is missing", self.path))?;
         let at = format!("{}.", self.path.trim_start_matches("#/").replace('/', "."));
-        strict(&at, self.resolve(defs)?)
+        strict(&at, definition)
     }
 }
 
@@ -164,7 +191,7 @@ type Ignored = Option<Value>;
 #[derive(Deserialize)]
 struct Descriptor {
     #[serde(rename = "allOf")]
-    all_of: (Ref, Object<Capabilities>),
+    all_of: (Value, Object<Capabilities>),
     /// The SDK documents the options and capabilities instead.
     #[serde(rename = "description")]
     _description: Ignored,
@@ -172,7 +199,7 @@ struct Descriptor {
 
 #[derive(Deserialize)]
 struct Capabilities {
-    capabilities: Ref,
+    capabilities: Value,
 }
 
 #[allow(dead_code)]
@@ -189,83 +216,6 @@ struct MdnsTxt {
 enum Origin {
     #[serde(rename = "source")]
     Source,
-}
-
-#[derive(Deserialize)]
-struct EventEntry {
-    #[serde(rename = "x-origin")]
-    _origin: Origin,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    deprecated: bool,
-    #[serde(rename = "x-deprecation", default)]
-    deprecation: String,
-    #[serde(rename = "x-max-rate-hz")]
-    max_rate_hz: Option<f64>,
-    properties: EventParts,
-}
-
-#[derive(Deserialize)]
-struct EventParts {
-    payload: Value,
-}
-
-#[derive(Deserialize)]
-struct CommandEntry {
-    #[serde(rename = "x-origin")]
-    _origin: Origin,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    deprecated: bool,
-    #[serde(rename = "x-deprecation", default)]
-    deprecation: String,
-    #[serde(rename = "x-timeout-ms")]
-    timeout_ms: u64,
-    properties: CommandParts,
-}
-
-#[derive(Deserialize)]
-struct CommandParts {
-    input: Value,
-    output: Value,
-    errors: Value,
-    /// The reply envelope, which the SDK writes and the tests check replies against.
-    #[serde(rename = "result")]
-    _result: Ignored,
-}
-
-impl Channel {
-    fn new(name: String, doc: String, deprecated: bool, deprecation: String) -> Channel {
-        Channel {
-            name,
-            doc,
-            deprecated: deprecated.then_some(deprecation),
-        }
-    }
-}
-
-impl From<(String, EventEntry)> for Event {
-    fn from((name, entry): (String, EventEntry)) -> Event {
-        Event {
-            channel: Channel::new(name, entry.description, entry.deprecated, entry.deprecation),
-            max_rate_hz: entry.max_rate_hz,
-            payload: entry.properties.payload,
-        }
-    }
-}
-
-impl From<(String, CommandEntry)> for Command {
-    fn from((name, entry): (String, CommandEntry)) -> Command {
-        Command {
-            channel: Channel::new(name, entry.description, entry.deprecated, entry.deprecation),
-            timeout_ms: entry.timeout_ms,
-            input: entry.properties.input,
-            output: entry.properties.output,
-            refusal: entry.properties.errors,
-        }
-    }
 }
 
 /// Keywords that only make an object holding the protocol's parts a schema itself.

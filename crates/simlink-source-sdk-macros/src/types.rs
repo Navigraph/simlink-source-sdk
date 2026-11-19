@@ -21,20 +21,21 @@ pub struct Types {
 pub fn generate(manifest: &Manifest) -> Result<Types, String> {
     let mut roots = Roots::default();
     roots.add(&manifest.options);
-    roots.add(&manifest.handshake_error);
+    roots.add(&manifest.handshake_errors);
     let payloads: Vec<_> = manifest
         .events
-        .iter()
-        .map(|event| roots.add(&event.payload))
+        .values()
+        .map(|event| roots.add(&event.properties.payload))
         .collect();
     let commands: Vec<_> = manifest
         .commands
-        .iter()
+        .values()
         .map(|command| {
+            let parts = &command.properties;
             [
-                roots.add(&command.input),
-                roots.add(&command.output),
-                roots.add(&command.refusal),
+                roots.add(&parts.input),
+                roots.add(&parts.output),
+                roots.add(&parts.errors),
             ]
         })
         .collect();
