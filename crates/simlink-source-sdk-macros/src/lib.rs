@@ -1,13 +1,11 @@
 //! `protocol!("path/to/source-schema.json")`: Simlink's source manifest as exported Rust items.
 //!
 //! `manifest` reads the manifest into a model and fails on anything the SDK doesn't handle. The other modules each
-//! generate part of the API from that model: the protocol's types via typify (`types`), the `Event` enum and the
-//! typed `Source` methods per event and command (`api`), the codes Simlink refuses and rejects with (`codes`), and the
-//! constants the SDK connects with (`consts`). Every API item is a UniFFI item, so bindings never read
-//! the manifest.
+//! generate part of the API from that model: the protocol's types via typify (`types`), the `Event` and `Channel`
+//! enums and the typed `Source` methods per event and command (`api`), and the constants the SDK connects with
+//! (`consts`). Every API item is a UniFFI item, so bindings never read the manifest.
 
 mod api;
-mod codes;
 mod consts;
 mod manifest;
 mod types;
@@ -35,7 +33,6 @@ fn expand(path: &LitStr) -> syn::Result<proc_macro2::TokenStream> {
     let types = types::generate(&manifest).map_err(fail)?;
     let type_items = &types.tokens;
     let api = api::generate(&manifest, &types);
-    let codes = codes::generate(&manifest);
     let consts = consts::generate(&manifest);
     let file = file.display().to_string();
 
@@ -45,7 +42,6 @@ fn expand(path: &LitStr) -> syn::Result<proc_macro2::TokenStream> {
 
         #type_items
         #api
-        #codes
         #consts
     })
 }

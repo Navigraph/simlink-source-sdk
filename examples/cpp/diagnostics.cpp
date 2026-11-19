@@ -33,10 +33,11 @@ struct State : simlink_source_sdk::StateListener {
         } else if (const auto* connected = std::get_if<ConnectionState::kConnected>(&variant)) {
             std::printf("Connected to %s\n", connected->address.c_str());
         } else if (const auto* rejected = std::get_if<ConnectionState::kRejected>(&variant)) {
-            std::printf("Refused (%s): %s%s\n", rejected->error.wire_code().c_str(),
-                        rejected->message.c_str(), rejected->retrying ? ", retrying" : "");
-            using Invalid = simlink_source_sdk::HandshakeError::kIdentificationInvalid;
-            if (const auto* invalid = std::get_if<Invalid>(&rejected->error.get_variant())) {
+            std::printf("Refused (%s): %s%s\n", rejected->code.c_str(), rejected->message.c_str(),
+                        rejected->retrying ? ", retrying" : "");
+            using Invalid = simlink_source_sdk::HandshakeError::kHandshakeIdentificationInvalid;
+            const auto* invalid = rejected->error ? std::get_if<Invalid>(&rejected->error->get_variant()) : nullptr;
+            if (invalid) {
                 for (const auto& issue : invalid->issues) {
                     std::printf("  %s\n", issue.c_str());
                 }
@@ -51,7 +52,7 @@ struct State : simlink_source_sdk::StateListener {
 struct Rejections : simlink_source_sdk::RejectionListener {
     void rejected(const simlink_source_sdk::Rejection& rejection) override {
         std::printf("Simlink rejected %s (%s): %s\n", rejection.channel.wire_name().c_str(),
-                    rejection.code.wire_code().c_str(), rejection.message.c_str());
+                    rejection.code.c_str(), rejection.message.value_or("").c_str());
         for (const auto& issue : rejection.issues) {
             std::printf("  %s: %s\n", issue.path.c_str(), issue.message.c_str());
         }

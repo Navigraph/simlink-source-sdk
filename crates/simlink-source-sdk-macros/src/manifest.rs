@@ -2,10 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use heck::ToUpperCamelCase;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 pub struct Channel {
     pub name: String,
@@ -25,33 +24,6 @@ pub struct Command {
     pub input: Value,
     pub output: Value,
     pub refusal: Value,
-}
-
-/// One of the codes Simlink refuses a handshake or rejects a frame with.
-pub struct Code {
-    pub code: String,
-    pub doc: String,
-    pub variant: String,
-    pub fields: Vec<Field>,
-}
-
-/// A field of a code's metadata.
-#[derive(Clone)]
-pub struct Field {
-    pub key: String,
-    pub ty: FieldType,
-    pub required: bool,
-}
-
-/// The JSON types every binding has.
-#[derive(Clone, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum FieldType {
-    String,
-    Integer,
-    Number,
-    Boolean,
-    Array { items: Box<FieldType> },
 }
 
 /// What the SDK connects with.
@@ -85,12 +57,14 @@ pub struct SocketIo {
 }
 
 pub struct Manifest {
-    /// `SourceOptions`: the descriptor without the capabilities, which the SDK declares.
-    pub descriptor: Value,
+    /// The descriptor's identity part, which integrators fill in.
+    pub options: Value,
+    pub handshake_error: Value,
+    /// The descriptor's capabilities, which the SDK declares.
+    pub capabilities: Value,
+    pub error_frame: Value,
     pub events: Vec<Event>,
     pub commands: Vec<Command>,
-    pub handshake_errors: Vec<Code>,
-    pub rejection_codes: Vec<Code>,
     pub connection: Connection,
     /// The types every schema above refers to by `#/$defs/<name>`.
     pub defs: Map<String, Value>,
@@ -114,19 +88,18 @@ pub fn read(text: &str) -> Result<Manifest, String> {
         commands,
     } = root.properties;
 
-    let mut handshake_codes = Vec::new();
-    let handshake_errors: OneOf<Object<HandshakeError>> = handshake_errors.read(&root.defs)?;
-    for error in handshake_errors.one_of {
-        handshake_codes.extend(error.properties.codes()?);
-    }
-    let error_frame: Object<ErrorFrame> = error_frame.read(&root.defs)?;
+    let Descriptor {
+        all_of: (options, capabilities),
+        ..
+    } = descriptor.read(&root.defs)?;
 
     Ok(Manifest {
-        descriptor: source_options(descriptor.resolve(&root.defs)?)?,
+        options: options.schema(&root.defs)?,
+        handshake_error: handshake_errors.schema(&root.defs)?,
+        capabilities: capabilities.properties.capabilities.schema(&root.defs)?,
+        error_frame: error_frame.schema(&root.defs)?,
         events: events.properties.into_iter().map(Event::from).collect(),
         commands: commands.properties.into_iter().map(Command::from).collect(),
-        handshake_errors: handshake_codes,
-        rejection_codes: error_frame.properties.code.codes("", Vec::new())?,
         connection: root.connection,
         defs: root.defs,
     })
@@ -165,6 +138,12 @@ impl Ref {
             .ok_or(format!("{} is missing", self.path))
     }
 
+    /// A schema of just this reference, once it resolves.
+    fn schema(&self, defs: &Map<String, Value>) -> Result<Value, String> {
+        self.resolve(defs)?;
+        Ok(json!({ "$ref": self.path }))
+    }
+
     /// The definition, read as `T`.
     fn read<T: DeserializeOwned>(&self, defs: &Map<String, Value>) -> Result<T, String> {
         let at = format!("{}.", self.path.trim_start_matches("#/").replace('/', "."));
@@ -178,14 +157,23 @@ struct Object<T> {
     properties: T,
 }
 
-#[derive(Deserialize)]
-struct OneOf<T> {
-    #[serde(rename = "oneOf")]
-    one_of: Vec<T>,
-}
-
 /// A key the SDK knows about and leaves alone, with the reason where it's declared.
 type Ignored = Option<Value>;
+
+/// The options integrators fill in, and the capabilities the SDK declares.
+#[derive(Deserialize)]
+struct Descriptor {
+    #[serde(rename = "allOf")]
+    all_of: (Ref, Object<Capabilities>),
+    /// The SDK documents the options and capabilities instead.
+    #[serde(rename = "description")]
+    _description: Ignored,
+}
+
+#[derive(Deserialize)]
+struct Capabilities {
+    capabilities: Ref,
+}
 
 #[allow(dead_code)]
 #[derive(Deserialize)]
@@ -280,115 +268,6 @@ impl From<(String, CommandEntry)> for Command {
     }
 }
 
-#[derive(Deserialize)]
-struct HandshakeError {
-    code: CodeSchema,
-    #[serde(default)]
-    metadata: Metadata,
-}
-
-#[derive(Default, Deserialize)]
-struct Metadata {
-    properties: BTreeMap<String, FieldType>,
-    #[serde(default)]
-    required: Vec<String>,
-}
-
-impl HandshakeError {
-    fn codes(self) -> Result<Vec<Code>, String> {
-        let Metadata {
-            properties,
-            required,
-        } = self.metadata;
-        let fields = properties.into_iter().map(|(key, ty)| Field {
-            required: required.contains(&key),
-            key,
-            ty,
-        });
-        self.code.codes("HANDSHAKE_", fields.collect())
-    }
-}
-
-/// The frame fields the rejection listener reads by name, which must be present.
-#[allow(dead_code)]
-#[derive(Deserialize)]
-struct ErrorFrame {
-    event: Value,
-    message: Value,
-    code: CodeSchema,
-    issues: Issues,
-}
-
-#[allow(dead_code)]
-#[derive(Deserialize)]
-struct Issues {
-    items: Object<Issue>,
-}
-
-#[allow(dead_code)]
-#[derive(Deserialize)]
-struct Issue {
-    path: Value,
-    code: Value,
-    message: Value,
-}
-
-/// A string schema whose `const` or `enum` lists codes.
-#[derive(Deserialize)]
-struct CodeSchema {
-    #[serde(rename = "const")]
-    constant: Option<String>,
-    #[serde(rename = "enum", default)]
-    values: Vec<String>,
-    #[serde(default)]
-    description: String,
-}
-
-impl CodeSchema {
-    /// Each code, named as a variant without `prefix`: `HANDSHAKE_SOURCE_ID_IN_USE` → `SourceIdInUse`.
-    fn codes(self, prefix: &str, fields: Vec<Field>) -> Result<Vec<Code>, String> {
-        let codes: Vec<_> = self.constant.into_iter().chain(self.values).collect();
-        if codes.is_empty() {
-            return Err("a code schema has no const or enum".into());
-        }
-        codes
-            .into_iter()
-            .map(|code| {
-                let variant = code
-                    .strip_prefix(prefix)
-                    .unwrap_or(&code)
-                    .to_upper_camel_case();
-                if variant.is_empty() || variant == "Other" {
-                    return Err(format!("{code} can't name a variant"));
-                }
-                Ok(Code {
-                    doc: self.description.clone(),
-                    variant,
-                    fields: fields.clone(),
-                    code,
-                })
-            })
-            .collect()
-    }
-}
-
-fn source_options(descriptor: &Value) -> Result<Value, String> {
-    let mut schema = descriptor.clone();
-    schema["properties"]
-        .as_object_mut()
-        .ok_or("descriptor.properties is missing")?
-        .remove("capabilities")
-        .ok_or("the SDK declares descriptor.capabilities, but the protocol has none")?;
-    if let Some(required) = schema["required"].as_array_mut() {
-        required.retain(|name| name != "capabilities");
-    }
-    schema["title"] = "SourceOptions".into();
-    schema["description"] =
-        "Source identity presented to Simlink. The SDK declares the capabilities.".into();
-
-    Ok(schema)
-}
-
 /// Keywords that only make an object holding the protocol's parts a schema itself.
 const WRAPPER: &[&str] = &[
     "$schema",
@@ -444,8 +323,8 @@ mod tests {
             "/properties",
             "/properties/events/properties/telemetry.ownship",
             "/properties/commands/properties/atis.get/properties",
-            "/$defs/HandshakeError/oneOf/1/properties",
-            "/$defs/SourceErrorFrame/properties",
+            "/$defs/SourceDescriptor",
+            "/$defs/SourceDescriptor/allOf/1/properties",
         ] {
             let mut changed = manifest.clone();
             changed.pointer_mut(pointer).unwrap()["unknown"] = json!(1);

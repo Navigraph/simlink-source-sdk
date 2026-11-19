@@ -70,9 +70,16 @@ pub fn sample(schema: &Value, root: &Value, full: bool, branch: usize) -> Value 
     if let Some(target) = schema["$ref"].as_str().and_then(|r| r.strip_prefix('#')) {
         return sample(root.pointer(target).unwrap(), root, full, branch);
     }
-    // A reference with its own keywords, such as a description.
-    if let Some([only]) = schema["allOf"].as_array().map(Vec::as_slice) {
-        return sample(only, root, full, branch);
+    if let Some(parts) = schema["allOf"].as_array() {
+        let mut merged = Map::new();
+        for part in parts {
+            match sample(part, root, full, branch) {
+                Value::Object(object) => merged.extend(object),
+                // A reference with its own keywords, such as a description.
+                value => return value,
+            }
+        }
+        return Value::Object(merged);
     }
     if let Some(value) = schema.get("const") {
         return value.clone();

@@ -44,11 +44,11 @@ class State : StateListener
             ConnectionState.Searching => "Searching for Simlink",
             ConnectionState.Connected connected => $"Connected to {connected.Address}",
             ConnectionState.Rejected rejected =>
-                $"Refused ({rejected.Error.WireCode()}): {rejected.Message}"
+                $"Refused ({rejected.Code}): {rejected.Message}"
                     + (rejected.Retrying ? ", retrying" : ""),
             _ => throw new UnreachableException(),
         });
-        if (state is ConnectionState.Rejected { Error: HandshakeError.IdentificationInvalid invalid })
+        if (state is ConnectionState.Rejected { Error: HandshakeError.HandshakeIdentificationInvalid invalid })
         {
             foreach (var issue in invalid.Issues)
             {
@@ -62,7 +62,7 @@ class Rejections : RejectionListener
 {
     public void Rejected(Rejection rejection)
     {
-        Console.WriteLine($"Simlink rejected {rejection.Channel.WireName()} ({rejection.Code.WireCode()}): {rejection.Message}");
+        Console.WriteLine($"Simlink rejected {rejection.Channel.WireName()} ({rejection.Code}): {rejection.Message}");
         foreach (var issue in rejection.Issues)
         {
             Console.WriteLine($"  {issue.Path}: {issue.Message}");

@@ -276,17 +276,16 @@ impl Thread {
                 }
                 Event::ConnectError(ConnectError::Refused { message, data }) => {
                     let data = data.unwrap_or_default();
-                    let error = HandshakeError::read(
-                        data["code"].as_str().unwrap_or_default(),
-                        &data["metadata"],
-                    );
-                    log::warn!(
-                        "Simlink refused the source: {} {message}",
-                        error.wire_code()
-                    );
+                    let code = data["code"].as_str().unwrap_or_default().to_owned();
+                    log::warn!("Simlink refused the source: {code} {message}");
+                    let error = serde_json::from_value(data).ok();
                     // An invalid descriptor fails the same way on every attempt.
-                    let permanent = matches!(error, HandshakeError::IdentificationInvalid { .. });
+                    let permanent = matches!(
+                        error,
+                        Some(HandshakeError::HandshakeIdentificationInvalid { .. })
+                    );
                     self.listeners.state(ConnectionState::Rejected {
+                        code,
                         error,
                         message,
                         retrying: !permanent,
@@ -316,7 +315,10 @@ impl Thread {
 
         if name == ERROR_CHANNEL {
             log::warn!("Simlink rejected data: {payload}");
-            self.listeners.rejected(&payload);
+            match serde_json::from_value(payload) {
+                Ok(frame) => self.listeners.rejected(frame),
+                Err(e) => log::warn!("Can't read the rejection: {e}"),
+            }
         } else if let Some(responder) = ack {
             let reply = Reply {
                 ops: self.replies.clone(),

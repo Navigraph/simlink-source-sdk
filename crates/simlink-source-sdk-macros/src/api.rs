@@ -1,4 +1,5 @@
-//! The `Event` enum and `emit_*` methods, and per command a handler trait, a reply object and an `on_*` method.
+//! The `Event` enum and `emit_*` methods, per command a handler trait, a reply object and an `on_*` method, and the
+//! `Channel` enum rejections name.
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -102,6 +103,8 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
         },
     );
 
+    let channel = channel(manifest);
+
     quote! {
         use crate::Source;
 
@@ -127,6 +130,57 @@ pub fn generate(manifest: &Manifest, types: &Types) -> TokenStream {
         }
 
         #(#commands)*
+
+        #channel
+    }
+}
+
+/// Every event and command, as Simlink names them in a rejection, with an `Other` variant for what a newer Simlink
+/// sends.
+fn channel(manifest: &Manifest) -> TokenStream {
+    let (variants, reads, names): (Vec<_>, Vec<_>, Vec<_>) = manifest
+        .channels()
+        .map(|channel| {
+            let (name, doc) = (&channel.name, &channel.doc);
+            let variant = format_ident!("{}", name.to_upper_camel_case());
+            (
+                quote!(#[doc = #doc] #variant),
+                quote!(#name => Self::#variant),
+                quote!(Self::#variant => #name),
+            )
+        })
+        .collect();
+
+    quote! {
+        /// An event or command, as Simlink names it in a rejection.
+        #[derive(Clone, Debug, PartialEq, Eq, ::uniffi::Enum)]
+        #[non_exhaustive]
+        pub enum Channel {
+            #( #variants, )*
+            /// A channel this SDK doesn't know, from a newer Simlink.
+            Other { name: String },
+        }
+
+        impl Channel {
+            pub(crate) fn read(name: &str) -> Self {
+                match name {
+                    #( #reads, )*
+                    name => Self::Other { name: name.to_owned() },
+                }
+            }
+        }
+
+        #[::uniffi::export]
+        impl Channel {
+            /// The name as Simlink sends it, such as `telemetry.ownship`.
+            pub fn wire_name(&self) -> String {
+                match self {
+                    #( #names, )*
+                    Self::Other { name } => name,
+                }
+                .to_owned()
+            }
+        }
     }
 }
 

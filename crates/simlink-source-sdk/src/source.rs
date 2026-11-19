@@ -7,10 +7,11 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
+use serde_json::Value;
 
+use crate::wire::{SourceCapabilities, SourceErrorFrame, SourceErrorIssuePathItem};
 use crate::worker::{Reply, Worker};
-use crate::{Channel, Event, HandshakeError, RejectionCode};
+use crate::{Channel, Event, HandshakeError};
 
 /// Why a call failed.
 #[derive(Clone, Debug, PartialEq, uniffi::Error)]
@@ -48,7 +49,10 @@ pub enum ConnectionState {
     Connected { address: String },
     /// Simlink refused the handshake.
     Rejected {
-        error: HandshakeError,
+        /// The code as Simlink sends it, such as `HANDSHAKE_SOURCE_ID_IN_USE`.
+        code: String,
+        /// The refusal with its details, unless it's one this SDK doesn't know, from a newer Simlink.
+        error: Option<HandshakeError>,
         message: String,
         /// False when the refusal would repeat, such as an invalid descriptor; the source then stops.
         retrying: bool,
@@ -71,8 +75,9 @@ pub trait RejectionListener: Send + Sync {
 #[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct Rejection {
     pub channel: Channel,
-    pub code: RejectionCode,
-    pub message: String,
+    /// The code as Simlink sends it, such as `INVALID_DATA`.
+    pub code: String,
+    pub message: Option<String>,
     /// Each field that failed validation.
     pub issues: Vec<RejectionIssue>,
 }
@@ -112,22 +117,21 @@ impl Listeners {
         shield("the state listener", || listener.changed(state));
     }
 
-    pub(crate) fn rejected(&self, frame: &Value) {
+    pub(crate) fn rejected(&self, frame: SourceErrorFrame) {
         let Some(listener) = &self.rejected else {
             return;
         };
-        let text = |value: &Value| value.as_str().unwrap_or_default().to_owned();
-        let issues = frame["issues"].as_array().map_or(&[][..], Vec::as_slice);
         let rejection = Rejection {
-            channel: Channel::read(frame["event"].as_str().unwrap_or_default()),
-            code: RejectionCode::read(frame["code"].as_str().unwrap_or_default(), &Value::Null),
-            message: text(&frame["message"]),
-            issues: issues
-                .iter()
+            channel: Channel::read(&frame.event),
+            code: frame.code,
+            message: frame.message,
+            issues: frame
+                .issues
+                .into_iter()
                 .map(|issue| RejectionIssue {
-                    path: issue_path(&issue["path"]),
-                    code: text(&issue["code"]),
-                    message: text(&issue["message"]),
+                    path: issue_path(&issue.path),
+                    code: issue.code,
+                    message: issue.message,
                 })
                 .collect(),
         };
@@ -137,14 +141,13 @@ impl Listeners {
 
 /// Formats an issue's path segments for display: names joined by dots, array indices in brackets, such as
 /// `[3].aircraft.position` from `[3, "aircraft", "position"]`.
-fn issue_path(segments: &Value) -> String {
+fn issue_path(segments: &[SourceErrorIssuePathItem]) -> String {
     let mut path = String::new();
-    for segment in segments.as_array().into_iter().flatten() {
+    for segment in segments {
         match segment {
-            Value::Number(index) => path.push_str(&format!("[{index}]")),
-            Value::String(name) if path.is_empty() => path.push_str(name),
-            Value::String(name) => path.push_str(&format!(".{name}")),
-            _ => {}
+            SourceErrorIssuePathItem::Integer(index) => path.push_str(&format!("[{index}]")),
+            SourceErrorIssuePathItem::String(name) if path.is_empty() => path.push_str(name),
+            SourceErrorIssuePathItem::String(name) => path.push_str(&format!(".{name}")),
         }
     }
     path
@@ -218,9 +221,21 @@ impl Source {
 
         let mut descriptor =
             serde_json::to_value(&self.options).expect("options serialize to JSON");
-        let events: Vec<&str> = self.events.iter().map(|event| event.info().name).collect();
-        let commands: Vec<&str> = setup.listeners.commands.keys().copied().collect();
-        descriptor["capabilities"] = json!({ "events": events, "commands": commands });
+        let capabilities = SourceCapabilities {
+            events: self
+                .events
+                .iter()
+                .map(|event| event.info().name.into())
+                .collect(),
+            commands: setup
+                .listeners
+                .commands
+                .keys()
+                .map(|&name| name.into())
+                .collect(),
+        };
+        descriptor["capabilities"] =
+            serde_json::to_value(capabilities).expect("capabilities serialize to JSON");
 
         let Setup { listeners, address } = std::mem::take(setup);
         *lifecycle = Lifecycle::Running(Worker::start(descriptor, address, listeners));

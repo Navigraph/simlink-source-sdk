@@ -268,8 +268,8 @@ fn relays_simlink_rejections() {
         rejections.recv_timeout(WAIT),
         Ok(Rejection {
             channel: Channel::TelemetryTraffic,
-            code: RejectionCode::InvalidData,
-            message: "bad traffic".into(),
+            code: "INVALID_DATA".into(),
+            message: Some("bad traffic".into()),
             issues: vec![RejectionIssue {
                 path: "[3].aircraft.position".into(),
                 code: "invalid_type".into(),
@@ -288,10 +288,8 @@ fn relays_simlink_rejections() {
             channel: Channel::Other {
                 name: "telemetry.future".into()
             },
-            code: RejectionCode::Other {
-                code: "FUTURE_CODE".into()
-            },
-            message: "later".into(),
+            code: "FUTURE_CODE".into(),
+            message: Some("later".into()),
             issues: vec![],
         })
     );
@@ -436,9 +434,10 @@ fn retries_a_refusal_that_can_clear() {
     assert_eq!(
         wait_for_state(&states, rejected),
         ConnectionState::Rejected {
-            error: HandshakeError::SourceIdInUse {
+            code: "HANDSHAKE_SOURCE_ID_IN_USE".into(),
+            error: Some(HandshakeError::HandshakeSourceIdInUse {
                 source_id: "test".into()
-            },
+            }),
             message: "Refused: HANDSHAKE_SOURCE_ID_IN_USE".into(),
             retrying: true,
         }
@@ -459,9 +458,8 @@ fn retries_a_refusal_newer_than_the_sdk() {
     assert_eq!(
         wait_for_state(&states, rejected),
         ConnectionState::Rejected {
-            error: HandshakeError::Other {
-                code: "HANDSHAKE_FROM_A_NEWER_SIMLINK".into()
-            },
+            code: "HANDSHAKE_FROM_A_NEWER_SIMLINK".into(),
+            error: None,
             message: "Refused: HANDSHAKE_FROM_A_NEWER_SIMLINK".into(),
             retrying: true,
         }
@@ -510,9 +508,10 @@ fn stops_after_an_invalid_identification() {
     assert_eq!(
         wait_for_state(&states, rejected),
         ConnectionState::Rejected {
-            error: HandshakeError::IdentificationInvalid {
+            code: "HANDSHAKE_IDENTIFICATION_INVALID".into(),
+            error: Some(HandshakeError::HandshakeIdentificationInvalid {
                 issues: vec!["id: Required".into()]
-            },
+            }),
             message: "Refused: HANDSHAKE_IDENTIFICATION_INVALID".into(),
             retrying: false,
         }

@@ -46,6 +46,7 @@ fn generated_types_round_trip_through_the_manifest() {
         round_trip::<FlightplanGetCommandRefusal>,
     );
     check("descriptor", round_trip_descriptor);
+    check("handshakeErrors", round_trip::<HandshakeError>);
 
     // A channel added to the manifest fails here until its types are listed above.
     let expected: BTreeSet<String> = channels("events")
@@ -54,7 +55,7 @@ fn generated_types_round_trip_through_the_manifest() {
         .chain(channels("commands").iter().flat_map(|name| {
             ["input", "output", "errors"].map(|part| format!("commands/{name}/{part}"))
         }))
-        .chain(["descriptor".to_owned()])
+        .chain(["descriptor", "handshakeErrors"].map(str::to_owned))
         .collect();
     assert_eq!(checked, expected);
 }
