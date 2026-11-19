@@ -3,10 +3,12 @@
 
 use std::collections::HashMap;
 use std::net::ToSocketAddrs;
+use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+use serde::Serialize;
 use serde_json::{Value, json};
 use socket_io::{
     Addresses, Backoff, Client, ConnectError, DisconnectReason, Event, Frame, Options, Responder,
@@ -52,27 +54,29 @@ impl Ops {
     }
 }
 
-/// Answers one command. Dropping it unanswered lets the command time out.
-pub struct Reply {
+/// One command's answer, given at most once. Dropping it unanswered lets the command time out.
+pub struct PendingReply {
     ops: Ops,
-    responder: Responder,
+    responder: Mutex<Option<Responder>>,
 }
 
-impl Reply {
-    pub fn ok(self, value: Value) {
-        self.send(json!({ "ok": true, "value": value }));
+impl PendingReply {
+    pub fn ok(&self, value: &impl Serialize) -> Result<(), Error> {
+        self.send(json!({ "ok": true, "value": value }))
     }
 
     /// Refuses with one of the command's declared error codes.
-    pub fn refuse(self, error: Value) {
-        self.send(json!({ "ok": false, "error": error }));
+    pub fn refuse(&self, error: &impl Serialize) -> Result<(), Error> {
+        self.send(json!({ "ok": false, "error": error }))
     }
 
-    fn send(self, result: Value) {
-        self.ops.send(Op::Reply {
-            responder: self.responder,
-            result,
-        });
+    fn send(&self, result: Value) -> Result<(), Error> {
+        let responder = self.responder.lock().expect("reply lock").take();
+        let responder = responder.ok_or_else(|| Error::AlreadyAnswered {
+            message: "this command was already answered".into(),
+        })?;
+        self.ops.send(Op::Reply { responder, result });
+        Ok(())
     }
 }
 
@@ -121,13 +125,12 @@ impl Worker {
     }
 
     /// Queues the latest payload for `event`. Sent at most at the event's rate limit; dropped while disconnected.
-    pub fn emit(&self, event: &'static EventInfo, payload: &Value) -> Result<(), Error> {
-        let frame =
-            Frame::event(NAMESPACE, event.name, vec![payload.clone()]).map_err(|error| {
-                Error::InvalidArgument {
-                    message: error.to_string(),
-                }
-            })?;
+    pub fn emit(&self, event: &'static EventInfo, payload: Value) -> Result<(), Error> {
+        let frame = Frame::event(NAMESPACE, event.name, vec![payload]).map_err(|error| {
+            Error::InvalidArgument {
+                message: error.to_string(),
+            }
+        })?;
         // Refused here because Simlink would drop the connection instead.
         if frame.size() > MAX_PAYLOAD_BYTES {
             return Err(Error::InvalidArgument {
@@ -285,7 +288,6 @@ impl Thread {
 
                     if permanent {
                         client.close();
-                        self.wait_for_stop();
                         return;
                     }
                     rejoin_at = Some(Instant::now() + rejoin_backoff.duration());
@@ -312,22 +314,13 @@ impl Thread {
                 Err(e) => log::warn!("Can't read the rejection: {e}"),
             }
         } else if let Some(responder) = ack {
-            let reply = Reply {
+            let reply = PendingReply {
                 ops: self.replies.clone(),
-                responder,
+                responder: Mutex::new(Some(responder)),
             };
             self.listeners.command(&name, payload, reply);
         } else {
             log::debug!("Ignoring unexpected event {name}");
-        }
-    }
-
-    /// Blocks until the source is dropped. Emits and replies are dropped meanwhile.
-    fn wait_for_stop(&self) {
-        while let Ok(op) = self.ops.recv() {
-            if let Op::Stop = op {
-                return;
-            }
         }
     }
 }

@@ -19,4 +19,4 @@ pub mod protocol {
 pub use logging::*;
 pub use protocol::*;
 pub use source::*;
-pub(crate) use worker::EventInfo;
+pub(crate) use worker::{EventInfo, PendingReply};

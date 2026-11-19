@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::wire::{SourceCapabilities, SourceErrorFrame, SourceErrorIssuePathItem};
-use crate::worker::{Reply, Worker};
+use crate::worker::{PendingReply, Worker};
 use crate::{Channel, Event, HandshakeError};
 
 /// Why a call failed.
@@ -103,11 +103,9 @@ pub(crate) struct Listeners {
 }
 
 impl Listeners {
-    pub(crate) fn command(&self, name: &str, input: Value, reply: Reply) {
+    pub(crate) fn command(&self, name: &str, input: Value, reply: PendingReply) {
         match self.commands.get(name) {
-            Some(handle) => shield(name, || {
-                handle(input, PendingReply(Mutex::new(Some(reply))));
-            }),
+            Some(handle) => shield(name, || handle(input, reply)),
             None => log::warn!("No handler for {name}"),
         }
     }
@@ -151,12 +149,6 @@ fn issue_path(segments: &[SourceErrorIssuePathItem]) -> String {
         }
     }
     path
-}
-
-fn to_json(value: &impl Serialize) -> Result<Value, Error> {
-    serde_json::to_value(value).map_err(|e| Error::InvalidArgument {
-        message: e.to_string(),
-    })
 }
 
 /// Runs a foreign callback. A C# or C++ exception arrives as a panic, which would end the SDK's thread.
@@ -253,13 +245,13 @@ impl Source {
     }
 
     pub(crate) fn emit_json(&self, event: Event, payload: &impl Serialize) -> Result<(), Error> {
-        let payload = to_json(payload)?;
+        let payload = serde_json::to_value(payload).expect("payloads serialize to JSON");
         let info = event.info();
         match &*self.lifecycle.lock().expect("source lock") {
             Lifecycle::Running(_) if !self.events.contains(&event) => Err(Error::Undeclared {
                 message: format!("\"{}\" is not declared in the source descriptor", info.name),
             }),
-            Lifecycle::Running(worker) => worker.emit(info, &payload),
+            Lifecycle::Running(worker) => worker.emit(info, payload),
             Lifecycle::Configuring(_) => Err(Error::WrongState {
                 message: "start the source before emitting".into(),
             }),
@@ -291,32 +283,5 @@ impl Source {
                 message: "register before starting the source".into(),
             }),
         }
-    }
-}
-
-/// One command's answer, given at most once.
-pub(crate) struct PendingReply(Mutex<Option<Reply>>);
-
-impl PendingReply {
-    pub(crate) fn ok(&self, value: &impl Serialize) -> Result<(), Error> {
-        let value = to_json(value)?;
-        self.take()?.ok(value);
-        Ok(())
-    }
-
-    pub(crate) fn refuse(&self, error: &impl Serialize) -> Result<(), Error> {
-        let error = to_json(error)?;
-        self.take()?.refuse(error);
-        Ok(())
-    }
-
-    fn take(&self) -> Result<Reply, Error> {
-        self.0
-            .lock()
-            .expect("reply lock")
-            .take()
-            .ok_or_else(|| Error::AlreadyAnswered {
-                message: "this command was already answered".into(),
-            })
     }
 }
