@@ -185,15 +185,7 @@ impl Thread {
                     Ok(Op::Emit(event, frame)) => {
                         pending.insert(event.name, (event, frame));
                     }
-                    Ok(Op::Reply { responder, result }) => {
-                        // Ack ids start over with each connection, so a stale reply could answer another command,
-                        // and Simlink closes a connection that acks before joining.
-                        if client.connected() && client.is_current(&responder) {
-                            client.ack(responder, vec![result]);
-                        } else {
-                            log::debug!("Dropping a reply to a command from an earlier connection");
-                        }
-                    }
+                    Ok(Op::Reply { responder, result }) => client.ack(responder, vec![result]),
                     Ok(Op::Stop) | Err(TryRecvError::Disconnected) => {
                         client.close();
                         return;

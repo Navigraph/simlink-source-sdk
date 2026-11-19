@@ -24,7 +24,7 @@ pub struct Client {
     namespace: String,
     auth: Option<Map<String, Value>>,
     state: State,
-    /// Counts connections; see [`Client::is_current`].
+    /// Counts connections, since ack ids start over with each.
     connection: u64,
     backoff: Backoff,
     /// Cleared when the server ends the namespace.
@@ -33,11 +33,6 @@ pub struct Client {
     /// Events that arrived before the `CONNECT` answer. Like the reference `receiveBuffer`, it survives a lost
     /// connection.
     received_early: Vec<Event>,
-    /// Frames emitted before the `CONNECT` answer. Like the reference `sendBuffer`, it survives a lost connection.
-    sent_early: Vec<String>,
-    /// Whether the last connection was writable when it closed. The reference emit keeps checking the closed
-    /// transport until the next attempt replaces it.
-    was_writable: bool,
     events: VecDeque<Event>,
     signal: Arc<Signal>,
 }
@@ -49,8 +44,6 @@ enum State {
         candidates: Option<Addresses>,
         next: Option<SocketAddr>,
         error: Option<String>,
-        /// Acks, sent once a connection opens. Reference: engine.io-client's `writeBuffer`.
-        acks: Vec<String>,
     },
     Open(Box<Connection>),
     Waiting {
@@ -79,8 +72,6 @@ impl Client {
             joining: true,
             connected: false,
             received_early: Vec::new(),
-            sent_early: Vec::new(),
-            was_writable: false,
             events: VecDeque::new(),
             signal: Signal::new()?,
         };
@@ -102,44 +93,31 @@ impl Client {
         }
     }
 
-    /// Sends like a reference volatile event: dropped while a connection is opening or backlogged, held until joined
-    /// (also after a writable connection closes, as the reference checks its last transport), sent otherwise.
+    /// Sends like a reference volatile event: dropped unless joined and writable. A connection whose ping is overdue
+    /// closes instead, as the reference `_hasPingExpired` does.
     pub fn emit(&mut self, frame: Frame) {
-        let (writable, ping_expired) = match &self.state {
-            State::Open(connection) => (connection.writable(), connection.ping_expired()),
-            _ => (self.was_writable, false),
+        let State::Open(connection) = &self.state else {
+            return;
         };
-        if !writable {
+        if !self.connected || !connection.writable() {
             return;
         }
-        if self.connected && !ping_expired {
-            self.send(frame.0);
+        if connection.ping_expired() {
+            self.on_close(DisconnectReason::PingTimeout);
         } else {
-            self.sent_early.push(frame.0);
-            // Reference: `_hasPingExpired` closes the connection as soon as it notices.
-            if self.connected {
-                self.on_close(DisconnectReason::PingTimeout);
-            }
+            self.send(frame.0);
         }
     }
 
-    /// Answers a server event over the current connection, even if the event came on an earlier one; see
-    /// [`Client::is_current`]. While a connection opens, it's queued ahead of `CONNECT`, which the reference server
-    /// answers by closing the connection. With none open or opening, it's dropped.
+    /// Answers a server event. Dropped unless joined over the connection the event came on: ack ids start over with
+    /// each connection, so the answer could reach a different event, and the reference server closes a connection
+    /// that acks before joining.
     ///
     /// <https://github.com/socketio/socket.io-protocol#acknowledgement>
     pub fn ack(&mut self, responder: Responder, args: Vec<Value>) {
-        let ack = wire::ack(&self.namespace, responder.id, args);
-        match &mut self.state {
-            State::Opening { acks, .. } => acks.push(ack),
-            _ => self.send(ack),
+        if self.connected && responder.connection == self.connection {
+            self.send(wire::ack(&self.namespace, responder.id, args));
         }
-    }
-
-    /// Whether the event came over the current connection. Ack ids restart per connection, so a stale answer could
-    /// reach a different event.
-    pub fn is_current(&self, responder: &Responder) -> bool {
-        responder.connection == self.connection
     }
 
     /// Whether the namespace is joined.
@@ -234,12 +212,10 @@ impl Client {
     }
 
     fn open(&mut self) {
-        self.was_writable = false;
         self.state = State::Opening {
             candidates: None,
             next: None,
             error: None,
-            acks: Vec::new(),
         };
     }
 
@@ -248,7 +224,6 @@ impl Client {
             candidates,
             next,
             error,
-            acks,
         } = &mut self.state
         else {
             return;
@@ -261,10 +236,7 @@ impl Client {
                 self.options.timeout,
                 &self.signal,
             ) {
-                Ok(connection) => {
-                    let acks = std::mem::take(acks);
-                    self.on_open(connection, acks);
-                }
+                Ok(connection) => self.on_open(connection),
                 Err(reason) => {
                     log::trace!("{address}: {reason}");
                     *error = Some(format!("{address}: {reason}"));
@@ -288,13 +260,10 @@ impl Client {
     }
 
     /// <https://github.com/socketio/socket.io-protocol#connection-to-a-namespace>
-    fn on_open(&mut self, connection: Connection, acks: Vec<String>) {
+    fn on_open(&mut self, connection: Connection) {
         self.state = State::Open(Box::new(connection));
         self.connection += 1;
         self.backoff.reset();
-        for ack in acks {
-            self.send(ack);
-        }
         self.send(wire::connect(&self.namespace, self.auth.as_ref()));
     }
 
@@ -333,7 +302,6 @@ impl Client {
 
     fn drop_connection(&mut self) {
         if let State::Open(connection) = std::mem::replace(&mut self.state, State::Idle) {
-            self.was_writable = connection.writable();
             connection.close();
         }
     }
@@ -359,11 +327,8 @@ impl Client {
                 };
                 let address = connection.address;
                 self.connected = true;
-                // Reference: `Socket.emitBuffered`. Received, then sent, then `connect`.
+                // Reference: `Socket.emitBuffered`. Received, then `connect`.
                 self.events.extend(self.received_early.drain(..));
-                for frame in std::mem::take(&mut self.sent_early) {
-                    self.send(frame);
-                }
                 self.events.push_back(Event::Connect { address });
             }
             Inbound::ConnectError { message, data, .. } => {

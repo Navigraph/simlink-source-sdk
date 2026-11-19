@@ -133,8 +133,8 @@ Not implemented, since Simlink doesn't need it:
 - **HTTP long-polling**, and so upgrades. Sessions are websocket from the start, which the Engine.IO spec allows.
 - **TLS** (`wss://`), query parameters and extra headers.
 - **More than one namespace** per connection. Packets for other namespaces are ignored.
-- **Acks for events the client sends.** Events go out like the reference client's volatile ones, so a backlogged
-  connection drops them.
+- **Acks for events the client sends**, and buffering. Events go out like the reference client's volatile ones, so
+  they're dropped unless the namespace is joined and the connection isn't backlogged.
 - **Sending binary.** Binary packets from the server are validated and dropped.
 - **Connection state recovery**, which Simlink doesn't enable.
 - **Older servers.** A Socket.IO v2 server's connect answer is reported as unsupported.
@@ -147,8 +147,8 @@ SDK thread stays responsive.
   the socket is ready, a deadline such as the ping timeout or backoff passes, or another thread calls its `Waker`.
   An idle source doesn't wake up.
 - A server that sends no ping within `pingInterval + pingTimeout` counts as lost, whatever else it sends.
-- Acks are sent over the current connection, even for an event from an earlier one, as the reference client does.
-  `Client::is_current` tells the caller which, since ack ids start over with each connection.
+- Answers to an event from an earlier connection are dropped, since ack ids start over with each connection. The
+  reference client sends them anyway.
 - `tests/protocol.rs` ports the official protocol test suites to the client's side, and `tests/client.rs` checks the
   reference client's behavior.
 

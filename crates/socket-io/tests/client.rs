@@ -325,9 +325,9 @@ mod manager {
 mod socket {
     use super::*;
 
-    /// `Socket.emit` with `volatile`, then `emitBuffered`: dropped until the connection opens, then held until joined.
+    /// `Socket.emit` with `volatile`: dropped until joined.
     #[test]
-    fn drops_or_holds_events_until_connected() {
+    fn drops_events_until_joined() {
         let (joining, joined) = std::sync::mpsc::channel();
         let (opened, open) = std::sync::mpsc::channel();
         let (address, server) = serve(move |mut listener| {
@@ -338,7 +338,6 @@ mod socket {
             open.recv().unwrap();
             peer.assert_nothing_sent(Duration::from_millis(200));
             peer.send(r#"40/custom,{"sid":"a"}"#);
-            assert_eq!(peer.recv(), r#"42/custom,["early"]"#);
             assert_eq!(peer.recv(), r#"42/custom,["later"]"#);
         });
 
@@ -347,7 +346,7 @@ mod socket {
         client.emit(event("dropped"));
         quiet_until(&mut client, &joined);
         // Open, but not joined.
-        client.emit(event("early"));
+        client.emit(event("dropped"));
         opened.send(()).unwrap();
         assert_connect(next(&mut client), address);
         client.emit(event("later"));
@@ -380,27 +379,7 @@ mod socket {
         };
         assert_connect(next(&mut client), address);
         // It came over this connection, before the server's answer.
-        assert!(client.is_current(&responder));
         client.ack(responder, vec![]);
-        finish(client, server);
-    }
-
-    /// `Socket.emit`: the reference checks its last transport, which stays writable after closing.
-    #[test]
-    fn holds_events_while_reconnecting() {
-        let (address, server) = serve(|mut listener| {
-            let mut peer = listener.accept();
-            peer.accept("40/custom,");
-            peer.close();
-            let mut peer = listener.accept();
-            peer.accept("40/custom,");
-            assert_eq!(peer.recv(), r#"42/custom,["meanwhile"]"#);
-        });
-
-        let mut client = joined_with(address, NS, None, fast());
-        assert_disconnect(next(&mut client), DisconnectReason::TransportClose);
-        client.emit(event("meanwhile"));
-        assert_connect(next(&mut client), address);
         finish(client, server);
     }
 
@@ -432,47 +411,21 @@ mod socket {
 
     /// `Socket.emit` and engine.io-client's `_hasPingExpired`.
     #[test]
-    fn holds_events_and_closes_once_the_ping_is_overdue() {
+    fn closes_instead_of_emitting_once_the_ping_is_overdue() {
         let (address, server) = serve(|mut listener| {
             let mut peer = listener.accept();
             peer.accept_after(SHORT_HEARTBEAT, "40/custom,");
             peer.wait_closed();
             let mut peer = listener.accept();
             peer.accept("40/custom,");
-            assert_eq!(peer.recv(), r#"42/custom,["held"]"#);
+            peer.assert_nothing_sent(Duration::from_millis(200));
         });
 
         let mut client = joined_with(address, NS, None, fast());
         // Past pingInterval + pingTimeout, without polling.
         std::thread::sleep(Duration::from_millis(600));
-        client.emit(event("held"));
+        client.emit(event("dropped"));
         assert_disconnect(next(&mut client), DisconnectReason::PingTimeout);
-        assert_connect(next(&mut client), address);
-        finish(client, server);
-    }
-
-    /// `Socket.emit` and `emitBuffered`, for events emitted before the connect ack.
-    #[test]
-    fn keeps_sent_events_across_a_lost_connection() {
-        let (joining, joined) = std::sync::mpsc::channel();
-        let (closing, close) = std::sync::mpsc::channel();
-        let (address, server) = serve(move |mut listener| {
-            let mut peer = listener.accept();
-            peer.send(support::OPEN);
-            peer.recv();
-            joining.send(()).unwrap();
-            close.recv().unwrap();
-            peer.close();
-            let mut peer = listener.accept();
-            peer.accept("40/custom,");
-            assert_eq!(peer.recv(), r#"42/custom,["early"]"#);
-        });
-
-        let mut client = client(address, NS, None, fast());
-        quiet_until(&mut client, &joined);
-        client.emit(event("early"));
-        closing.send(()).unwrap();
-        assert_disconnect(next(&mut client), DisconnectReason::TransportClose);
         assert_connect(next(&mut client), address);
         finish(client, server);
     }
@@ -501,7 +454,8 @@ mod socket {
         server.join().unwrap();
     }
 
-    /// `Socket.onevent` and `onconnect`: events received before the connect ack come before the next `connect`.
+    /// `Socket.onevent` and `onconnect`: events received before the connect ack come before the next `connect`. Ack
+    /// ids start over with each connection, so their answers are dropped.
     #[test]
     fn keeps_held_events_across_a_lost_connection() {
         let (address, server) = serve(|mut listener| {
@@ -510,7 +464,9 @@ mod socket {
             peer.recv();
             peer.send(r#"42/custom,0["early"]"#);
             peer.close();
-            listener.accept().accept("40/custom,");
+            let mut peer = listener.accept();
+            peer.accept("40/custom,");
+            peer.assert_nothing_sent(Duration::from_millis(200));
         });
 
         let mut client = client(address, NS, None, fast());
@@ -526,8 +482,8 @@ mod socket {
             panic!("expected an event awaiting an ack");
         };
         assert_connect(next(&mut client), address);
-        assert!(!client.is_current(&responder));
-        server.join().unwrap();
+        client.ack(responder, vec![]);
+        finish(client, server);
     }
 
     /// `Socket.onpacket`. A v2 server answers this way; the client keeps waiting.
@@ -604,80 +560,6 @@ mod socket {
         client.join();
         assert_connect(next(&mut client), address);
         server.join().unwrap();
-    }
-
-    /// engine.io-client's `writeBuffer`: an ack made while a connection opens goes out ahead of `CONNECT`.
-    #[test]
-    fn sends_acks_made_while_opening_ahead_of_connect() {
-        let (address, server) = serve(|mut listener| {
-            let mut peer = listener.accept();
-            peer.accept("40/custom,");
-            peer.send(r#"42/custom,0["question"]"#);
-            peer.close();
-            let mut peer = listener.accept();
-            peer.send(support::OPEN);
-            assert_eq!(peer.recv(), "43/custom,0[]");
-            assert_eq!(peer.recv(), "40/custom,");
-        });
-        let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let started = attempts.clone();
-
-        let mut client = Client::new(
-            move || {
-                started.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                Box::new(std::iter::once(address))
-            },
-            NS,
-            None,
-            fast(),
-        )
-        .unwrap();
-        assert_connect(next(&mut client), address);
-        let Event::Message {
-            ack: Some(responder),
-            ..
-        } = next(&mut client)
-        else {
-            panic!("expected an event awaiting an ack");
-        };
-        assert_disconnect(next(&mut client), DisconnectReason::TransportClose);
-        // One step at a time, until the next attempt has found its address but not opened it.
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while attempts.load(std::sync::atomic::Ordering::SeqCst) < 2 {
-            assert!(Instant::now() < deadline, "no second attempt");
-            assert!(client.poll(Duration::ZERO).is_none());
-        }
-        client.ack(responder, vec![]);
-        assert!(matches!(next(&mut client), Event::Disconnect(_)));
-        server.join().unwrap();
-    }
-
-    /// `Socket.ack` sends it anyway. Ack ids start over with each connection, so `is_current` lets the caller check.
-    #[test]
-    fn sends_answers_to_an_earlier_connection() {
-        let (address, server) = serve(|mut listener| {
-            let mut peer = listener.accept();
-            peer.accept("40/custom,");
-            peer.send(r#"42/custom,0["question"]"#);
-            peer.close();
-            let mut peer = listener.accept();
-            peer.accept("40/custom,");
-            assert_eq!(peer.recv(), r#"43/custom,0[]"#);
-        });
-
-        let mut client = joined_with(address, NS, None, fast());
-        let Event::Message {
-            ack: Some(responder),
-            ..
-        } = next(&mut client)
-        else {
-            panic!("expected an event awaiting an ack");
-        };
-        assert!(client.is_current(&responder));
-        while !matches!(next(&mut client), Event::Connect { .. }) {}
-        assert!(!client.is_current(&responder));
-        client.ack(responder, vec![]);
-        finish(client, server);
     }
 }
 
