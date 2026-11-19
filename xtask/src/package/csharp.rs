@@ -1,7 +1,8 @@
 //! `simlink-source-sdk-csharp-<version>.zip`: the `Navigraph.Simlink.SourceSdk` NuGet package, with every platform's
 //! library under `runtimes/<rid>/native`, and the examples restoring it from the archive's folder.
 //!
-//! One package serves every platform, so each builds its library with `runtime` and one machine packs them all.
+//! One package serves every platform, so each builds its library into `target/package/runtimes` with `runtime`, and
+//! one machine packs them all.
 
 use std::path::Path;
 use std::process::Command;
@@ -22,15 +23,12 @@ const NUGET_CONFIG: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 </configuration>
 "#;
 
-/// Where `runtime` leaves this platform's library.
+/// Where `runtime` leaves each platform's library, as `<rid>/native/<library>`.
 const RUNTIMES: &str = "target/package/runtimes";
 
-/// Builds this platform's library into `target/package/runtimes/<rid>/native`, as the package lays it out.
+/// Builds this platform's library into `RUNTIMES`, as the package lays it out.
 pub fn runtime() -> Result<()> {
-    add_runtime(&Library::build()?)
-}
-
-fn add_runtime(library: &Library) -> Result<()> {
+    let library = Library::build()?;
     let native = Path::new(RUNTIMES).join(library.rid).join("native");
     std::fs::create_dir_all(&native)?;
     let name = library
@@ -42,20 +40,10 @@ fn add_runtime(library: &Library) -> Result<()> {
     Ok(())
 }
 
-/// Packs the libraries in `runtimes`, or only this platform's without it, and tests the examples against the package.
-pub fn package(runtimes: Option<&Path>) -> Result<()> {
-    let runtimes = match runtimes {
-        Some(runtimes) => {
-            // The libraries are prebuilt; the package still compiles the C# bindings.
-            bindings::build()?;
-            runtimes
-        }
-        None => {
-            // Also generates the bindings.
-            runtime()?;
-            Path::new(RUNTIMES)
-        }
-    };
+/// Packs the libraries in `RUNTIMES` and tests the examples against the package.
+pub fn package() -> Result<()> {
+    // The libraries are prebuilt; the package still compiles the C# bindings.
+    bindings::build()?;
 
     let archive = Archive::new(format!("simlink-source-sdk-csharp-{VERSION}"))?;
     run(Command::new("dotnet")
@@ -70,7 +58,7 @@ pub fn package(runtimes: Option<&Path>) -> Result<()> {
         .arg(format!("-p:Version={VERSION}"))
         .arg(format!(
             "-p:SimlinkSourceSdkRuntimes={}",
-            std::path::absolute(runtimes)?.display()
+            std::path::absolute(RUNTIMES)?.display()
         )))?;
     std::fs::write(archive.path("nuget.config"), NUGET_CONFIG)?;
     archive.add_rewritten(

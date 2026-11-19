@@ -102,7 +102,7 @@ jobs:
           path: target/package/runtimes
           merge-multiple: true
 
-      - run: cargo xtask package csharp --runtimes target/package/runtimes
+      - run: cargo xtask package csharp
 
       # Also attaches to a release already created for the tag.
       - name: Release

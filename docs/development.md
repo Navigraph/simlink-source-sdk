@@ -171,12 +171,12 @@ The workflow runs in two stages:
 
 - **On each platform**, it runs the tests and examples, then `cargo xtask package cpp` and
   `cargo xtask package csharp-runtime`.
-- **Once all platforms pass**, `cargo xtask package csharp --runtimes` puts every platform's library into one NuGet
+- **Once all platforms pass**, `cargo xtask package csharp` puts every platform's library into one NuGet
   package and attaches all of the archives to the release.
 
 Each package task builds and runs the examples from its own archive, so a broken archive fails the release before it's
 published.
 
 To build a release archive locally, run the same commands. On Linux they need zig and `cargo-zigbuild`, at the versions
-`release.yml` installs. `cargo xtask package csharp` without `--runtimes` packages only the current
-platform's library.
+`release.yml` installs. `cargo xtask package csharp` packs the libraries `package csharp-runtime` left in
+`target/package/runtimes`, so locally run that first.

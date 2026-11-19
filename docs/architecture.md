@@ -167,6 +167,6 @@ the staged copy:
   Rust library, `bindings/cpp/prebuilt/CMakeLists.txt`, the Visual Studio property sheet on Windows, and the examples.
   The user's build compiles the bindings, so they match its compiler and configuration; only the Rust library, whose
   interface is C, is prebuilt. macOS ships one universal library.
-- **C#** (`package csharp-runtime` per platform, then `package csharp --runtimes` once): one NuGet package with
+- **C#** (`package csharp-runtime` per platform, then `package csharp` once): one NuGet package with
   every platform's library under `runtimes/<rid>/native`, targeting .NET Standard 2.0. `bindings/csharp/Polyfills.cs`
   supplies the compiler types the generated code needs that .NET Standard 2.0 lacks.
