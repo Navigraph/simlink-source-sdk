@@ -141,7 +141,9 @@
             },
             "errors": {
               "type": "string",
-              "const": "ATIS_NOT_AVAILABLE",
+              "enum": [
+                "ATIS_NOT_AVAILABLE"
+              ],
               "description": "No ATIS data for the requested airport",
               "title": "AtisGetCommandRefusal"
             },
@@ -176,7 +178,9 @@
                     },
                     "error": {
                       "type": "string",
-                      "const": "ATIS_NOT_AVAILABLE",
+                      "enum": [
+                        "ATIS_NOT_AVAILABLE"
+                      ],
                       "description": "No ATIS data for the requested airport"
                     }
                   },
@@ -239,7 +243,9 @@
             },
             "errors": {
               "type": "string",
-              "const": "FLIGHTPLAN_NOT_AVAILABLE",
+              "enum": [
+                "FLIGHTPLAN_NOT_AVAILABLE"
+              ],
               "description": "No flight plans for the requested keys",
               "title": "FlightplanGetCommandRefusal"
             },
@@ -284,7 +290,9 @@
                     },
                     "error": {
                       "type": "string",
-                      "const": "FLIGHTPLAN_NOT_AVAILABLE",
+                      "enum": [
+                        "FLIGHTPLAN_NOT_AVAILABLE"
+                      ],
                       "description": "No flight plans for the requested keys"
                     }
                   },
@@ -327,6 +335,25 @@
   "title": "SourceProtocol",
   "$defs": {
     "SourceDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/SourceOptions"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "capabilities": {
+              "$ref": "#/$defs/SourceCapabilities"
+            }
+          },
+          "required": [
+            "capabilities"
+          ]
+        }
+      ],
+      "description": "Source identity and capabilities"
+    },
+    "SourceOptions": {
       "type": "object",
       "properties": {
         "id": {
@@ -338,38 +365,37 @@
           "type": "string",
           "minLength": 1,
           "description": "Source name shown to users"
-        },
-        "capabilities": {
-          "type": "object",
-          "properties": {
-            "events": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Event channels this source emits"
-            },
-            "commands": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Commands this source can answer"
-            }
-          },
-          "required": [
-            "events",
-            "commands"
-          ],
-          "description": "Declared event and command capabilities"
         }
       },
       "required": [
         "id",
-        "displayName",
-        "capabilities"
+        "displayName"
       ],
-      "description": "Source identity and capabilities"
+      "description": "Source identity"
+    },
+    "SourceCapabilities": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Event channels this source emits"
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Commands this source can answer"
+        }
+      },
+      "required": [
+        "events",
+        "commands"
+      ],
+      "description": "Declared event and command capabilities"
     },
     "HandshakeError": {
       "oneOf": [
@@ -378,21 +404,20 @@
           "properties": {
             "code": {
               "type": "string",
-              "const": "HANDSHAKE_THIRD_PARTY_DISABLED",
-              "description": "The user has turned off third party source connections in Simlink"
+              "const": "HANDSHAKE_THIRD_PARTY_DISABLED"
             }
           },
           "required": [
             "code"
-          ]
+          ],
+          "description": "The user has turned off third party source connections in Simlink"
         },
         {
           "type": "object",
           "properties": {
             "code": {
               "type": "string",
-              "const": "HANDSHAKE_IDENTIFICATION_INVALID",
-              "description": "The presented descriptor failed schema validation"
+              "const": "HANDSHAKE_IDENTIFICATION_INVALID"
             },
             "metadata": {
               "type": "object",
@@ -412,15 +437,15 @@
           "required": [
             "code",
             "metadata"
-          ]
+          ],
+          "description": "The presented descriptor failed schema validation"
         },
         {
           "type": "object",
           "properties": {
             "code": {
               "type": "string",
-              "const": "HANDSHAKE_SOURCE_ID_IN_USE",
-              "description": "Another connected source already holds this id"
+              "const": "HANDSHAKE_SOURCE_ID_IN_USE"
             },
             "metadata": {
               "type": "object",
@@ -437,9 +462,11 @@
           "required": [
             "code",
             "metadata"
-          ]
+          ],
+          "description": "Another connected source already holds this id"
         }
-      ]
+      ],
+      "description": "Why Simlink refused the handshake"
     },
     "SourceErrorFrame": {
       "type": "object",
@@ -458,39 +485,44 @@
         "issues": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              },
-              "path": {
-                "type": "array",
-                "items": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ]
-                }
-              }
-            },
-            "required": [
-              "code",
-              "message",
-              "path"
-            ]
+            "$ref": "#/$defs/SourceErrorIssue"
           }
         }
       },
       "required": [
         "event",
         "code"
+      ]
+    },
+    "SourceErrorIssue": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "path"
       ]
     },
     "OwnshipAircraft": {
