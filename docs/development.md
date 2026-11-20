@@ -165,15 +165,21 @@ Bumping a dependency to a version that needs newer Rust fails the MSRV job.
    ```
 
 The tag starts `.github/workflows/release.yml`, which creates a GitHub release with the C++ and C# archives and
-generated release notes. A version with a `-`, such as `v1.0.0-rc1`, is published as a prerelease. The workflow fails
+generated release notes, and publishes the crates and the NuGet package. A version with a `-`, such as `v1.0.0-rc.1`,
+is published as a prerelease. The workflow fails
 if the tag doesn't match the version in `Cargo.toml`.
 
-The workflow runs in two stages:
+The workflow runs in three stages:
 
 - **On each platform**, it runs the tests and examples, then `cargo xtask package cpp` and
   `cargo xtask package csharp-runtime`.
 - **Once all platforms pass**, `cargo xtask package csharp` puts every platform's library into one NuGet
   package and attaches all of the archives to the release.
+- **Then**, it publishes `simlink-source-sdk` and `simlink-source-sdk-macros` to crates.io, and
+  `Navigraph.Simlink.SourceSdk` to nuget.org. Both use trusted publishing, so the repository stores no keys: each
+  registry trusts `release.yml` in this repository and hands it a token that expires within the hour. Neither registry
+  lets a version be replaced. Rerunning the job skips the NuGet package if it's already up, but fails on crates that
+  are.
 
 Each package task builds and runs the examples from its own archive, so a broken archive fails the release before it's
 published.
