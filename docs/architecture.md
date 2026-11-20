@@ -169,7 +169,9 @@ the staged copy:
 - **C++** (`package cpp`, per platform): the generated headers, the C++ half of the bindings as source, the static
   Rust library, `bindings/cpp/prebuilt/CMakeLists.txt`, the Visual Studio property sheet on Windows, and the examples.
   The user's build compiles the bindings, so they match its compiler and configuration; only the Rust library, whose
-  interface is C, is prebuilt. macOS ships one universal library.
+  interface is C, is prebuilt. macOS ships one universal library. Built on its own, the archive's CMake project
+  installs as the `simlink-source-sdk` package, which is how the vcpkg port in
+  [Navigraph/vcpkg-registry](https://github.com/Navigraph/vcpkg-registry) installs it.
 - **C#** (`package csharp-runtime` per platform, then `package csharp` once): one NuGet package with
   every platform's library under `runtimes/<rid>/native`, targeting .NET Standard 2.0. `bindings/csharp/Polyfills.cs`
   supplies the compiler types the generated code needs that .NET Standard 2.0 lacks.

@@ -16,7 +16,19 @@ pub fn package() -> Result<()> {
     let library = Library::build()?;
     let archive = Archive::new(format!("simlink-source-sdk-cpp-{VERSION}-{}", library.rid))?;
 
-    archive.add("bindings/cpp/prebuilt/CMakeLists.txt", "")?;
+    // CMake versions are numeric only, so a prerelease installs as its release.
+    let release = concat!(
+        env!("CARGO_PKG_VERSION_MAJOR"),
+        ".",
+        env!("CARGO_PKG_VERSION_MINOR"),
+        ".",
+        env!("CARGO_PKG_VERSION_PATCH"),
+    );
+    archive.add_rewritten(
+        "bindings/cpp/prebuilt/CMakeLists.txt",
+        "CMakeLists.txt",
+        &[("VERSION 0.0.0", &format!("VERSION {release}"))],
+    )?;
     if cfg!(windows) {
         archive.add("bindings/cpp/prebuilt/simlink-source-sdk.props", "")?;
     }

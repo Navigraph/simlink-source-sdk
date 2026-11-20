@@ -50,6 +50,25 @@ add_subdirectory(path/to/simlink-source-sdk-cpp-<version>-<platform> simlink-sou
 target_link_libraries(my_app PRIVATE simlink-source-sdk::simlink-source-sdk)
 ```
 
+Or install it as a CMake package, once per configuration, and find it with
+`find_package(simlink-source-sdk CONFIG REQUIRED)`:
+
+```sh
+cmake -S simlink-source-sdk-cpp-<version>-<platform> -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+cmake --install build --config Release --prefix <prefix>
+```
+
+**vcpkg**
+
+The `simlink-source-sdk` port is in [Navigraph's registry](https://github.com/Navigraph/vcpkg-registry). Add the
+registry to your `vcpkg-configuration.json` as its README shows, `simlink-source-sdk` to your `vcpkg.json`, and then:
+
+```cmake
+find_package(simlink-source-sdk CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE simlink-source-sdk::simlink-source-sdk)
+```
+
 **Visual Studio project**
 
 In the Property Manager, right-click your project, choose Add Existing Property Sheet, and pick
