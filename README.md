@@ -9,10 +9,8 @@
   <br/>
   <br/>
 
-  <p>Connect a flight simulator, add-on, or tool to Navigraph Simlink v2 as a <strong>source</strong> — emit telemetry and answer commands without implementing the Simlink protocol.</p>
+  <p>Connect a flight simulator, add-on, or tool to Navigraph Simlink v2 as a <strong>source</strong>: emit telemetry and answer commands without implementing the Simlink protocol.</p>
 </div>
-
-The SDK discovers Simlink on the local machine or network, manages connection and reconnection, rate-limits telemetry events (latest payload first), and dispatches incoming commands.
 
 ## Installing
 
