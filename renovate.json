@@ -6,6 +6,12 @@
       "description": ["Only allow cargo updates for vulnerability alerts"],
       "matchManagers": ["cargo"],
       "enabled": false
+    },
+    {
+      "description": "Only upgrade .NET to LTS releases",
+      "matchDatasources": ["dotnet-version"],
+      "matchPackageNames": ["dotnet-sdk", "dotnet-runtime"],
+      "allowedVersions": "/^\\d*[02468]\\./"
     }
   ]
 }
