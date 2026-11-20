@@ -9,110 +9,78 @@
   <br/>
   <br/>
 
-  <p>Connect a flight simulator, add-on or tool to Navigraph Simlink v2 as a <strong>source</strong>: emit telemetry and answer commands without implementing the Simlink protocol yourself.</p>
+  <p>Connect a flight simulator, add-on, or tool to Navigraph Simlink v2 as a <strong>source</strong> — emit telemetry and answer commands without implementing the Simlink protocol.</p>
 </div>
 
-## What it does
-
-A source tells Simlink about the simulator. It declares the events it emits, such as the aircraft's position and the
-traffic around it, and the commands it answers, such as ATIS and flight plan lookups. The SDK finds Simlink on this
-machine or the network, joins, reconnects whenever Simlink restarts, and sends each event no faster than its rate
-limit, latest payload first.
-
-## Requirements
-
-| | Minimum |
-| --- | --- |
-| Windows | Windows 10 or Server 2016, x64 |
-| Linux | x64 with glibc 2.17 or newer |
-| macOS | 10.12 or newer on Intel, 11 or newer on Apple silicon |
-| C++ | A C++20 compiler, and CMake 3.20 or newer for the CMake project |
-| C# | .NET 6 or newer, or .NET Framework 4.7.2 or newer |
-| Rust | 1.95 or newer |
+The SDK discovers Simlink on the local machine or network, manages connection and reconnection, rate-limits telemetry events (latest payload first), and dispatches incoming commands.
 
 ## Installing
 
-Download the SDK for your language from the [releases](https://github.com/Navigraph/simlink-source-sdk/releases).
-Each archive also holds the [examples](#examples), ready to build against it.
+Prebuilt binaries support Windows (x64), Linux (x64, glibc 2.17+), and macOS (Intel & Apple silicon).
 
 ### C++
 
-`simlink-source-sdk-cpp-<version>-<platform>.zip` holds the headers in `include`, the C++ half of the bindings in
-`src`, a static library in `lib`, a `CMakeLists.txt`, and on Windows a Visual Studio property sheet. Your build compiles
-`src/simlink_source_sdk.cpp` with your own compiler and settings, so any C++20 compiler works; on Windows, MSVC with the
-dynamic runtime library (`/MD` and `/MDd`, Visual Studio's default). The library is static, so nothing ships alongside
-your program.
-
-**CMake**
-
-```cmake
-add_subdirectory(path/to/simlink-source-sdk-cpp-<version>-<platform> simlink-source-sdk)
-target_link_libraries(my_app PRIVATE simlink-source-sdk::simlink-source-sdk)
-```
-
-Or install it as a CMake package, once per configuration, and find it with
-`find_package(simlink-source-sdk CONFIG REQUIRED)`:
-
-```sh
-cmake -S simlink-source-sdk-cpp-<version>-<platform> -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-cmake --install build --config Release --prefix <prefix>
-```
+Requires C++20 (CMake 3.20+ if using CMake; MSVC `/MD` or `/MDd` on Windows).
 
 **vcpkg**
 
-The `simlink-source-sdk` port is in [Navigraph's registry](https://github.com/Navigraph/vcpkg-registry). Add the
-registry to your `vcpkg-configuration.json` as its README shows, `simlink-source-sdk` to your `vcpkg.json`, and then:
+1. Add [Navigraph's vcpkg registry](https://github.com/Navigraph/vcpkg-registry) to `vcpkg-configuration.json` (see its README).
+2. Add `"simlink-source-sdk"` to `dependencies` in `vcpkg.json`.
+3. Link in `CMakeLists.txt`:
 
-```cmake
-find_package(simlink-source-sdk CONFIG REQUIRED)
-target_link_libraries(my_app PRIVATE simlink-source-sdk::simlink-source-sdk)
-```
+   ```cmake
+   find_package(simlink-source-sdk CONFIG REQUIRED)
+   target_link_libraries(my_app PRIVATE simlink-source-sdk::simlink-source-sdk)
+   ```
 
-**Visual Studio project**
+<details>
+<summary>Without vcpkg (GitHub release archive)</summary>
 
-In the Property Manager, right-click your project, choose Add Existing Property Sheet, and pick
-`simlink-source-sdk.props` from the SDK. It adds the headers, C++20, `src/simlink_source_sdk.cpp` and the library.
+1. Download and extract `simlink-source-sdk-cpp-<version>-<platform>.zip` from [Releases](https://github.com/Navigraph/simlink-source-sdk/releases).
+2. Integrate it with your build system:
+   - **CMake (`add_subdirectory`)**:
 
-**Other build systems**: compile `src/simlink_source_sdk.cpp` as C++20, add `include` to the include path, and link
-the library in `lib`, plus `ntdll.lib` and `userenv.lib` on Windows, and `pthread`, `dl`, `m`, `rt` and `util` on
-Linux.
+     ```cmake
+     add_subdirectory(path/to/simlink-source-sdk-cpp-<version>-<platform> simlink-source-sdk)
+     target_link_libraries(my_app PRIVATE simlink-source-sdk::simlink-source-sdk)
+     ```
+
+   - **CMake (installed package)** — install, then use `find_package(simlink-source-sdk CONFIG REQUIRED)` as above:
+
+     ```sh
+     cmake -S simlink-source-sdk-cpp-<version>-<platform> -B build -DCMAKE_BUILD_TYPE=Release
+     cmake --build build --config Release
+     cmake --install build --config Release --prefix <prefix>
+     ```
+
+   - **Visual Studio**: In Property Manager, right-click your project → *Add Existing Property Sheet* → select `simlink-source-sdk.props`.
+   - **Other build systems**: Compile `src/simlink_source_sdk.cpp` as C++20, add `include` to the include path, and link the static library in `lib` along with `ntdll.lib` and `userenv.lib` (Windows) or `pthread`, `dl`, `m`, `rt`, and `util` (Linux).
+
+</details>
 
 ### C#
 
-`simlink-source-sdk-csharp-<version>.zip` holds the `Navigraph.Simlink.SourceSdk` NuGet package. It targets .NET
-Standard 2.0, for .NET 6+ and .NET Framework 4.7.2+.
+```sh
+dotnet add package Navigraph.Simlink.SourceSdk
+```
 
-1. Copy `Navigraph.Simlink.SourceSdk.<version>.nupkg` into a folder in your repository, such as `packages`.
-2. Add that folder as a package source in a `nuget.config` next to your solution:
+Targets .NET Standard 2.0 (.NET 6+ and .NET Framework 4.7.2+) and bundles native libraries for all supported platforms.
 
-   ```xml
-   <configuration>
-     <packageSources>
-       <add key="simlink-source-sdk" value="packages" />
-     </packageSources>
-   </configuration>
-   ```
-
-3. `dotnet add package Navigraph.Simlink.SourceSdk --version <version>`
-
-The package carries the native library for every platform, and builds copy the right one. On .NET Framework, set
-`<PlatformTarget>x64</PlatformTarget>`: NuGet only copies the library for an x64 build. A single-file publish needs
-`<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>`.
+- **.NET Framework**: set `<PlatformTarget>x64</PlatformTarget>` so NuGet copies the native library.
+- **Single-file publish**: set `<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>`.
 
 ### Rust
 
-The crate isn't on crates.io yet:
-
-```toml
-simlink-source-sdk = { git = "https://github.com/Navigraph/simlink-source-sdk", tag = "v<version>" }
+```sh
+cargo add simlink-source-sdk
 ```
 
 ## Using it
 
-Each quickstart emits the aircraft's position ten times a second.
+Each quickstart below emits the aircraft's position ten times a second:
 
-**C++**
+<details>
+<summary><strong>C++</strong></summary>
 
 <!-- snippet: examples/cpp/quickstart.cpp -->
 ```cpp
@@ -157,7 +125,10 @@ int main() {
 }
 ```
 
-**C#**
+</details>
+
+<details>
+<summary><strong>C#</strong></summary>
 
 <!-- snippet: examples/csharp/Quickstart/Program.cs -->
 ```csharp
@@ -200,7 +171,10 @@ static TelemetryOwnshipEvent Ownship(double latitude, double longitude)
 }
 ```
 
-**Rust**
+</details>
+
+<details>
+<summary><strong>Rust</strong></summary>
 
 <!-- snippet: crates/simlink-source-sdk/examples/quickstart.rs -->
 ```rust
@@ -272,106 +246,39 @@ fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnshipEvent {
 }
 ```
 
-### Starting a source
+</details>
 
-Create a `Source` with its id, display name and the events it emits. Register a handler for each command it answers,
-and any listeners, then start it. Registering after starting fails. Dropping the source (disposing it in C#,
-releasing the last `shared_ptr` in C++) disconnects.
+### Key concepts
 
-Handlers and listeners must not hold their `Source`: the source owns them, so it would never be released.
-
-### Emitting events
-
-Each declared event has an emit method, such as `emit_telemetry_ownship`. Emit whenever you have new data; the SDK
-sends the latest payload no faster than the event's rate limit (10 Hz for ownship, 1 Hz for traffic) and drops the ones
-in between. Emitting an undeclared event, before starting, or a payload larger than Simlink's message size limit fails.
-
-### Answering commands
-
-Each handler gets the command's input and a reply. Answer once, either with a result or by refusing with one of the
-command's error codes, within the command's timeout; the method docs give each timeout. Answering twice fails. In C#,
-dispose the reply once answered.
-
-### Diagnostics
-
-- **State listener**: searching, connected, or refused by Simlink, with whether the SDK is retrying. A refusal has
-  Simlink's code and, unless it's from a newer Simlink, a `HandshakeError` with its details, such as the descriptor's
-  issues when it fails validation.
-- **Rejection listener**: Simlink found a payload or answer invalid, with the channel, Simlink's code, and the path and
-  reason for each field.
-- **`set_logger`**: the SDK's own logs, up to a level. Only the first call per process takes effect.
-
-### Threading
-
-Each source runs one background thread. Handlers and listeners run on it, so keep them short, and in a UI app hand
-results to the UI thread yourself. Emitting and answering are thread-safe: to answer a slow command, keep its reply and
-answer from any thread once the result is ready.
+- **Lifecycle**: Create a `Source` with its ID, display name, and declared events. Register command handlers and listeners before calling `start()` (registering afterwards fails). Dropping the source (`Dispose` in C#, releasing the last `shared_ptr` in C++) disconnects. Don't hold a reference to `Source` inside handlers or listeners — the source owns them, so it would leak.
+- **Events**: Call the emit method for each declared event (e.g. `emit_telemetry_ownship`) whenever new data arrives. The SDK rate-limits sends (10 Hz for ownship, 1 Hz for traffic) and keeps only the latest payload. Emitting before `start()`, emitting an undeclared event, or exceeding Simlink's message size limit fails.
+- **Commands**: Handlers receive the command input and a reply handle. Answer once (with a result or error code) within the command's timeout; answering twice fails. In C#, dispose the reply after answering.
+- **Diagnostics**:
+  - *State listener* — reports `searching`, `connected`, or `refused`, whether the SDK is retrying, and refusal details (`HandshakeError`).
+  - *Rejection listener* — reports payloads or replies rejected by Simlink, with channel, code, and per-field issues.
+  - *`set_logger`* — receives SDK logs up to a level (only the first call per process takes effect).
+- **Threading**: Each source runs one background thread for handlers and listeners — keep callbacks short and marshal to your UI thread if needed. Emitting and answering are thread-safe, so slow commands can store the reply and answer from another thread.
+- **Naming**: Types and methods match across languages using native casing (`emit_telemetry_ownship` in C++/Rust, `EmitTelemetryOwnship` in C#). Keyword fields get a trailing underscore in C++ and Rust (e.g. `true_`).
 
 ### Errors
 
-| Language | Type | Cases |
-| --- | --- | --- |
-| C++ | `simlink_source_sdk::SimlinkError` (thrown) | `InvalidArgument`, `Undeclared`, `WrongState`, `AlreadyAnswered`, as subclasses in `simlink_source_sdk::simlink_error` |
-| C# | `SimlinkException` (thrown) | The same, as nested classes such as `SimlinkException.WrongState` |
-| Rust | `simlink_source_sdk::Error` (returned) | The same, as variants |
+All languages expose the same error cases: `InvalidArgument`, `Undeclared`, `WrongState`, and `AlreadyAnswered`.
 
-### Names in each language
-
-The types and methods are the same in every language, in its own casing: `emit_telemetry_ownship` in C++ and Rust,
-`EmitTelemetryOwnship` in C#. In C++ and Rust, a field named after a keyword gets a suffix, such as `true_`.
+| Language | Type |
+| --- | --- |
+| C++ | `simlink_source_sdk::SimlinkError` (thrown; subclasses in `simlink_source_sdk::simlink_error`) |
+| C# | `SimlinkException` (thrown; nested classes such as `SimlinkException.WrongState`) |
+| Rust | `simlink_source_sdk::Error` (returned; enum variants) |
 
 ## Examples
 
-The examples cover the whole SDK, in C++, C# and Rust:
+Full examples for C++ ([`examples/cpp`](examples/cpp)), C# ([`examples/csharp`](examples/csharp)), and Rust ([`crates/simlink-source-sdk/examples`](crates/simlink-source-sdk/examples)):
 
-- **quickstart** emits the aircraft's position, `telemetry.ownship`.
-- **traffic** emits the aircraft around it, `telemetry.traffic`, identified by type or by category, and answers
-  `flightplan.get` for them.
-- **commands** answers `atis.get`, refusing airports without an ATIS.
-- **diagnostics** prints the SDK's logs, connection changes, anything Simlink rejects, and failed emits.
-
-Each one finds a running Simlink on this machine or the network and runs until you stop it with Ctrl+C. In the
-unzipped C++ archive:
-
-```sh
-cmake -S examples -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-build/bin/quickstart
-```
-
-In the unzipped C# archive:
-
-```sh
-dotnet run -c Release --project examples/Quickstart
-```
-
-## Building from source
-
-You need [Rust](https://rustup.rs) (the pinned toolchain installs itself), plus CMake 3.20 and a C++20 compiler for
-C++, or the .NET 10 SDK for C#. Then:
-
-```sh
-cargo xtask build
-```
-
-This builds the library into `target/release` and generates the C++ and C# bindings into `target/bindings`. The first
-run also installs the binding generators, which takes a few minutes. Link `bindings/cpp` with CMake as above, or
-reference `bindings/csharp/Navigraph.Simlink.SourceSdk.csproj`.
-
-The examples live in `examples/cpp`, `examples/csharp` and `crates/simlink-source-sdk/examples`. From the repository
-root:
-
-```sh
-cargo run --release -p simlink-source-sdk --example quickstart
-
-cmake -S examples/cpp -B target/examples/cpp -DCMAKE_BUILD_TYPE=Release
-cmake --build target/examples/cpp --config Release
-target/examples/cpp/bin/quickstart
-
-dotnet run -c Release --project examples/csharp/Quickstart
-```
+- **quickstart** — emits ownship position (`telemetry.ownship`).
+- **traffic** — emits surrounding aircraft (`telemetry.traffic`) and answers `flightplan.get`.
+- **commands** — answers `atis.get`, refusing airports without an ATIS.
+- **diagnostics** — prints SDK logs, connection changes, Simlink rejections, and failed emits.
 
 ## Contributing
 
-See [docs/development.md](docs/development.md) for building, testing and protocol updates, and
-[docs/architecture.md](docs/architecture.md) for how the SDK is put together.
+See [docs/development.md](docs/development.md) for building from source, running examples and tests, and updating the protocol, and [docs/architecture.md](docs/architecture.md) for how the SDK is structured.

@@ -19,16 +19,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # rustup installs the toolchain from rust-toolchain.toml on first use.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      # The generators take minutes to compile; xtask pins them in generators.rs.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/tools
           key: uniffi-generators-${{ runner.os }}-${{ hashFiles('xtask/src/generators.rs') }}
 
-      # Pinned so a runner image update can't silently change the compiler. Rust links with the same Visual Studio.
+      # Keep MSVC version stable across runner image updates.
       - name: Pin the MSVC toolset
         if: runner.os == 'Windows'
         shell: bash
@@ -41,12 +39,10 @@ jobs:
           global-json-file: global.json
 
       - run: cargo test --workspace --locked
-      # Builds every example against the bindings, then checks each one joins a test Simlink and answers it.
       - run: cargo xtask examples
       - run: cargo xtask docs --check
         if: runner.os == 'Linux'
 
-  # rust-toolchain.toml pins what we develop with; this checks the oldest Rust that `rust-version` promises.
   msrv:
     runs-on: ubuntu-26.04
 

@@ -1,6 +1,5 @@
 name: Docker
 
-# Checks the development image still builds and passes when anything it installs changes.
 on:
   push:
     branches: [main]

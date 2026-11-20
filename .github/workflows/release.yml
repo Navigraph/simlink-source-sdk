@@ -40,7 +40,7 @@ jobs:
           echo "CMAKE_GENERATOR=Visual Studio 18 2026" >> "$GITHUB_ENV"
           echo "CMAKE_GENERATOR_TOOLSET=v145" >> "$GITHUB_ENV"
 
-      # Builds the Linux library against an older glibc than the runner's.
+      # Cross-link Linux builds against an older glibc.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         if: runner.os == 'Linux'
         with:
@@ -54,7 +54,6 @@ jobs:
 
       - run: cargo test --workspace --locked
       - run: cargo xtask examples
-      # Each package task builds and runs its archive's own examples.
       - run: cargo xtask package cpp
       - run: cargo xtask package csharp-runtime
 
@@ -104,7 +103,6 @@ jobs:
 
       - run: cargo xtask package csharp
 
-      # Also attaches to a release already created for the tag.
       - name: Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
@@ -118,7 +116,6 @@ jobs:
           path: target/package/simlink-source-sdk-csharp-*/*.nupkg
           if-no-files-found: error
 
-  # Publishes the same build, with short-lived tokens from each registry's trusted publishing.
   publish:
     needs: release
     runs-on: ubuntu-26.04
@@ -151,7 +148,6 @@ jobs:
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
 
-      # Last, since cargo can't skip a version that's already published.
       - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
         id: crates-io
 
@@ -159,8 +155,7 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io.outputs.token }}
 
-  # Points the vcpkg port at this release's C++ archives. Prereleases stay out, since users updating their baseline
-  # would get them.
+  # Skip prereleases so vcpkg baseline updates stay on stable versions.
   vcpkg:
     needs: release
     if: ${{ !contains(github.ref_name, '-') }}
