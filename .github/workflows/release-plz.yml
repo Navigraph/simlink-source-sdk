@@ -22,7 +22,7 @@ jobs:
           persist-credentials: false
 
       # Uses BOT_TOKEN so pushing the tag triggers release.yml.
-      - uses: release-plz/action@63ab0c2746bedc448370bad4b0b3d536458398b0 # v0.5.50
+      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         with:
           command: release
         env:
@@ -45,7 +45,7 @@ jobs:
           token: ${{ secrets.BOT_TOKEN }}
 
       # Uses BOT_TOKEN so CI runs on the release PR.
-      - uses: release-plz/action@63ab0c2746bedc448370bad4b0b3d536458398b0 # v0.5.50
+      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         with:
           command: release-pr
         env:
