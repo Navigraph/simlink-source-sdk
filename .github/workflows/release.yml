@@ -158,3 +158,18 @@ jobs:
       - run: cargo publish --workspace --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io.outputs.token }}
+
+  # Points the vcpkg port at this release's C++ archives. Prereleases stay out, since users updating their baseline
+  # would get them.
+  vcpkg:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-26.04
+
+    steps:
+      - run: >-
+          gh api repos/Navigraph/vcpkg-registry/dispatches
+          -f event_type=simlink-source-sdk-released
+          -f "client_payload[version]=${GITHUB_REF_NAME#v}"
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}

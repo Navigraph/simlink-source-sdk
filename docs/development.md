@@ -169,7 +169,7 @@ generated release notes, and publishes the crates and the NuGet package. A versi
 is published as a prerelease. The workflow fails
 if the tag doesn't match the version in `Cargo.toml`.
 
-The workflow runs in three stages:
+Each stage runs only once the one before it passes on every platform, so a failing test publishes nothing:
 
 - **On each platform**, it runs the tests and examples, then `cargo xtask package cpp` and
   `cargo xtask package csharp-runtime`.
@@ -179,7 +179,9 @@ The workflow runs in three stages:
   `Navigraph.Simlink.SourceSdk` to nuget.org. Both use trusted publishing, so the repository stores no keys: each
   registry trusts `release.yml` in this repository and hands it a token that expires within the hour. Neither registry
   lets a version be replaced. Rerunning the job skips the NuGet package if it's already up, but fails on crates that
-  are.
+  are. Alongside, for a release that isn't a prerelease, it tells
+  [Navigraph/vcpkg-registry](https://github.com/Navigraph/vcpkg-registry) to point the `simlink-source-sdk` port at
+  the release's C++ archives, using the `BOT_TOKEN` secret.
 
 Each package task builds and runs the examples from its own archive, so a broken archive fails the release before it's
 published.
