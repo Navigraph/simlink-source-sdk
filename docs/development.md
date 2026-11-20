@@ -121,18 +121,12 @@ When bumping the MSRV, check [Rust's platform support](https://doc.rust-lang.org
 
 ## Releasing
 
-1. Bump `version` in the workspace `Cargo.toml` and merge to `main`.
-2. Tag the merge commit and push:
+`.github/workflows/release-plz.yml` (configured in `release-plz.toml`) keeps a Release PR open on `main` with the next version bump in `Cargo.toml`/`Cargo.lock` and updated `CHANGELOG.md`.
 
-   ```sh
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
-
-Pushing a `v*` tag triggers `.github/workflows/release.yml` (it fails if the tag doesn't match `Cargo.toml`; tags containing `-`, such as `v1.0.0-rc.1`, are marked as prereleases). Stages run sequentially so a failure publishes nothing:
+To cut a release, merge the Release PR. `release-plz` creates the `vX.Y.Z` tag and GitHub Release with the changelog, which triggers `.github/workflows/release.yml` (you can also bump `Cargo.toml` and push a `v*` tag manually for prereleases like `v1.0.0-rc.4`). Stages run sequentially so a failure publishes nothing:
 
 1. **Per platform**: runs tests and examples, then `cargo xtask package cpp` and `cargo xtask package csharp-runtime` (each package task also builds and runs the examples from its own archive).
-2. **Release**: `cargo xtask package csharp` combines all platform runtimes into one NuGet package and attaches all archives to the GitHub release with generated release notes.
+2. **Release**: `cargo xtask package csharp` combines all platform runtimes into one NuGet package and attaches all archives to the GitHub release.
 3. **Publish**: publishes `Navigraph.Simlink.SourceSdk` to NuGet and `simlink-source-sdk` / `simlink-source-sdk-macros` to crates.io via trusted publishing (no stored API keys). Neither registry allows replacing a published version; rerunning skips NuGet duplicates but fails on already-published crates.
 4. **vcpkg** (stable releases only): dispatches an update to [Navigraph/vcpkg-registry](https://github.com/Navigraph/vcpkg-registry) using `BOT_TOKEN`.
 

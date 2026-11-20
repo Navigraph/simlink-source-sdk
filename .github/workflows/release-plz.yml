@@ -1,0 +1,52 @@
+name: Release-plz
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-plz-release:
+    name: Create tag & release
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Uses BOT_TOKEN so pushing the tag triggers release.yml.
+      - uses: release-plz/action@63ab0c2746bedc448370bad4b0b3d536458398b0 # v0.5.50
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+
+  release-plz-pr:
+    name: Update release PR
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BOT_TOKEN }}
+
+      # Uses BOT_TOKEN so CI runs on the release PR.
+      - uses: release-plz/action@63ab0c2746bedc448370bad4b0b3d536458398b0 # v0.5.50
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}

@@ -1,0 +1,43 @@
+[workspace]
+publish = false
+semver_check = false
+changelog_update = false
+git_tag_enable = false
+git_release_enable = false
+pr_labels = ["release", "automated-pr"]
+
+[changelog]
+protect_breaking_commits = true
+commit_parsers = [
+  { message = "^chore: release", skip = true },
+  { message = "^feat", group = "🚀 Features" },
+  { message = "^fix", group = "🐛 Fixes" },
+  { message = "^test", group = "🧪 Tests" },
+  { message = "^chore\\(deps\\)", group = "📦 Dependencies" },
+  { message = "^(chore|build|refactor)", group = "🛠️ Maintenance" },
+  { message = "^ci", group = "🤖 CI/CD" },
+  { message = "^docs?", group = "📄 Documentation" },
+  { message = "^perf", group = "📈 Performance Improvements" },
+  { message = "^revert", group = "◀️ Revert" },
+  { message = ".*", group = "🤷‍♂️ Uncategorized changes" },
+]
+
+[[package]]
+name = "simlink-source-sdk"
+version_group = "simlink-source-sdk"
+changelog_update = true
+changelog_path = "CHANGELOG.md"
+changelog_include = ["simlink-source-sdk-macros"]
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+git_release_enable = true
+git_release_name = "v{{ version }}"
+git_release_type = "auto"
+
+[[package]]
+name = "simlink-source-sdk-macros"
+version_group = "simlink-source-sdk"
+
+[[package]]
+name = "xtask"
+release = false
