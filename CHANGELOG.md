@@ -7,17 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0-rc.4](https://github.com/Navigraph/simlink-source-sdk/compare/v1.0.0-rc.3...v1.0.0-rc.4) - 2026-11-20
+## [1.0.0] - 2026-11-20
 
-### 🐛 Fixes
-
-- link the system libraries Rust needs on Linux
-
-### 📄 Documentation
-
-- fix appearance of readme
-- cleanup
-
-### 🚀 Features
-
-- install the C++ archive as a CMake package
+Initial release.
