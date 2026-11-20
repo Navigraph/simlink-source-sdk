@@ -16,4 +16,7 @@ target_link_libraries(simlink_source_sdk PUBLIC
 # Rust's standard library imports from these, which MSVC doesn't link by default.
 if(WIN32)
   target_link_libraries(simlink_source_sdk PUBLIC ntdll userenv)
+# And from these, which glibc before 2.34 keeps out of libc.
+elseif(UNIX AND NOT APPLE)
+  target_link_libraries(simlink_source_sdk PUBLIC pthread dl m rt util)
 endif()

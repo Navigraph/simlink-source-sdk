@@ -56,7 +56,8 @@ In the Property Manager, right-click your project, choose Add Existing Property 
 `simlink-source-sdk.props` from the SDK. It adds the headers, C++20, `src/simlink_source_sdk.cpp` and the library.
 
 **Other build systems**: compile `src/simlink_source_sdk.cpp` as C++20, add `include` to the include path, and link
-the library in `lib`, plus `ntdll.lib` and `userenv.lib` on Windows.
+the library in `lib`, plus `ntdll.lib` and `userenv.lib` on Windows, and `pthread`, `dl`, `m`, `rt` and `util` on
+Linux.
 
 ### C#
 
