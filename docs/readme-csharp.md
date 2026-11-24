@@ -1,15 +1,4 @@
-<div align="center">
-  <a href="https://navigraph.com">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Navigraph/simlink-source-sdk/main/assets/logo.svg">
-      <img src="https://raw.githubusercontent.com/Navigraph/simlink-source-sdk/main/assets/logo-light.svg" alt="Navigraph Simlink Source SDK" width="560">
-    </picture>
-  </a>
-
-  <br/>
-
-  <p>Connect a flight simulator, add-on, or tool to Navigraph Simlink v2 as a <strong>source</strong>: emit telemetry and answer commands without implementing the Simlink protocol.</p>
-</div>
+Connect a flight simulator, add-on, or tool to Navigraph Simlink v2 as a **source**: emit telemetry and answer commands without implementing the Simlink protocol.
 
 ## Installing
 
@@ -19,8 +8,16 @@ dotnet add package Navigraph.Simlink.SourceSdk
 
 Targets .NET Standard 2.0 (.NET 6+ and .NET Framework 4.7.2+) and bundles native libraries for Windows (x64), Linux (x64, glibc 2.17+), and macOS (Intel & Apple silicon).
 
-- **.NET Framework**: set `<PlatformTarget>x64</PlatformTarget>` so NuGet copies the native library.
-- **Single-file publish**: set `<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>`.
+For .NET Framework or single-file publish, add to your project:
+
+```xml
+<PropertyGroup>
+  <!-- .NET Framework: so NuGet copies the native library -->
+  <PlatformTarget>x64</PlatformTarget>
+  <!-- Single-file publish -->
+  <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+</PropertyGroup>
+```
 
 ## Quickstart
 

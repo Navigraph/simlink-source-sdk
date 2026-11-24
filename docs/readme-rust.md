@@ -1,15 +1,4 @@
-<div align="center">
-  <a href="https://navigraph.com">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Navigraph/simlink-source-sdk/main/assets/logo.svg">
-      <img src="https://raw.githubusercontent.com/Navigraph/simlink-source-sdk/main/assets/logo-light.svg" alt="Navigraph Simlink Source SDK" width="560">
-    </picture>
-  </a>
-
-  <br/>
-
-  <p>Connect a flight simulator, add-on, or tool to Navigraph Simlink v2 as a <strong>source</strong>: emit telemetry and answer commands without implementing the Simlink protocol.</p>
-</div>
+Connect a flight simulator, add-on, or tool to Navigraph Simlink v2 as a **source**: emit telemetry and answer commands without implementing the Simlink protocol.
 
 ## Installing
 
