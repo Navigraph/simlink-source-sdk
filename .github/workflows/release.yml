@@ -154,7 +154,7 @@ jobs:
           user: ${{ secrets.NUGET_USER }}
 
       - run: >-
-          dotnet nuget push "nuget/*.nupkg"
+          dotnet nuget push "nuget/*/*.nupkg"
           --api-key "${{ steps.nuget.outputs.NUGET_API_KEY }}"
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
