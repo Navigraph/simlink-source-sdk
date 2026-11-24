@@ -74,6 +74,10 @@ cargo add simlink-source-sdk
 
 Requires Rust 1.95+.
 
+### Other languages
+
+We'd be happy to add bindings for more languages. If you need one, [open an issue](https://github.com/Navigraph/simlink-source-sdk/issues/new) to request it.
+
 ## Using it
 
 <details>
