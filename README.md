@@ -1,8 +1,8 @@
 <div align="center">
   <a href="https://navigraph.com">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/logo.svg">
-      <img src="assets/logo-light.svg" alt="Navigraph Simlink Source SDK" width="400">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Navigraph/simlink-source-sdk/main/assets/logo.svg">
+      <img src="https://raw.githubusercontent.com/Navigraph/simlink-source-sdk/main/assets/logo-light.svg" alt="Navigraph Simlink Source SDK" width="560">
     </picture>
   </a>
 
