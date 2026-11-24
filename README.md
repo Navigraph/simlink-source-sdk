@@ -7,7 +7,6 @@
   </a>
 
   <br/>
-  <br/>
 
   <p>Connect a flight simulator, add-on, or tool to Navigraph Simlink v2 as a <strong>source</strong>: emit telemetry and answer commands without implementing the Simlink protocol.</p>
 </div>
@@ -18,11 +17,11 @@ Prebuilt binaries support Windows (x64), Linux (x64, glibc 2.17+), and macOS (In
 
 ### C++
 
-Requires C++20 (CMake 3.20+ if using CMake; MSVC `/MD` or `/MDd` on Windows).
+Requires C++20 (CMake 3.20+ if using CMake).
 
 **vcpkg**
 
-1. Add [Navigraph's vcpkg registry](https://github.com/Navigraph/vcpkg-registry) to `vcpkg-configuration.json` (see its README).
+1. Add [Navigraph's vcpkg registry](https://github.com/Navigraph/vcpkg-registry) to `vcpkg-configuration.json`.
 2. Add `"simlink-source-sdk"` to `dependencies` in `vcpkg.json`.
 3. Link in `CMakeLists.txt`:
 
@@ -43,7 +42,7 @@ Requires C++20 (CMake 3.20+ if using CMake; MSVC `/MD` or `/MDd` on Windows).
      target_link_libraries(my_app PRIVATE simlink-source-sdk::simlink-source-sdk)
      ```
 
-   - **CMake (installed package)** — install, then use `find_package(simlink-source-sdk CONFIG REQUIRED)` as above:
+   - **CMake (installed package)**: install, then use `find_package(simlink-source-sdk CONFIG REQUIRED)` as above:
 
      ```sh
      cmake -S simlink-source-sdk-cpp-<version>-<platform> -B build -DCMAKE_BUILD_TYPE=Release
@@ -73,9 +72,9 @@ Targets .NET Standard 2.0 (.NET 6+ and .NET Framework 4.7.2+) and bundles native
 cargo add simlink-source-sdk
 ```
 
-## Using it
+Requires Rust 1.95+.
 
-Each quickstart below emits the aircraft's position ten times a second:
+## Using it
 
 <details>
 <summary><strong>C++</strong></summary>
@@ -256,7 +255,7 @@ fn ownship(latitude: f64, longitude: f64) -> TelemetryOwnshipEvent {
   - *Rejection listener* — reports payloads or replies rejected by Simlink, with channel, code, and per-field issues.
   - *`set_logger`* — receives SDK logs up to a level (only the first call per process takes effect).
 - **Threading**: Each source runs one background thread for handlers and listeners — keep callbacks short and marshal to your UI thread if needed. Emitting and answering are thread-safe, so slow commands can store the reply and answer from another thread.
-- **Naming**: Types and methods match across languages using native casing (`emit_telemetry_ownship` in C++/Rust, `EmitTelemetryOwnship` in C#). Keyword fields get a trailing underscore in C++ and Rust (e.g. `true_`).
+- **Naming**: Types and methods match across languages (apart from construction) using native casing (`emit_telemetry_ownship` in C++/Rust, `EmitTelemetryOwnship` in C#). Keyword fields get a trailing underscore in C++ and Rust (e.g. `true_`).
 
 ### Errors
 
@@ -270,7 +269,7 @@ All languages expose the same error cases: `InvalidArgument`, `Undeclared`, `Wro
 
 ## Examples
 
-Full examples for C++ ([`examples/cpp`](examples/cpp)), C# ([`examples/csharp`](examples/csharp)), and Rust ([`crates/simlink-source-sdk/examples`](crates/simlink-source-sdk/examples)):
+Full examples for C++ ([`examples/cpp`](https://github.com/Navigraph/simlink-source-sdk/tree/main/examples/cpp)), C# ([`examples/csharp`](https://github.com/Navigraph/simlink-source-sdk/tree/main/examples/csharp)), and Rust ([`crates/simlink-source-sdk/examples`](https://github.com/Navigraph/simlink-source-sdk/tree/main/crates/simlink-source-sdk/examples)):
 
 - **quickstart** — emits ownship position (`telemetry.ownship`).
 - **traffic** — emits surrounding aircraft (`telemetry.traffic`) and answers `flightplan.get`.
@@ -279,4 +278,4 @@ Full examples for C++ ([`examples/cpp`](examples/cpp)), C# ([`examples/csharp`](
 
 ## Contributing
 
-See [docs/development.md](docs/development.md) for building from source, running examples and tests, and updating the protocol, and [docs/architecture.md](docs/architecture.md) for how the SDK is structured.
+See [docs/development.md](https://github.com/Navigraph/simlink-source-sdk/blob/main/docs/development.md) for building from source, running examples and tests, and updating the protocol, and [docs/architecture.md](https://github.com/Navigraph/simlink-source-sdk/blob/main/docs/architecture.md) for how the SDK is structured.
