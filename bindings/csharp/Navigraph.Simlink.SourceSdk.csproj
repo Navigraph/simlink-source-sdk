@@ -10,11 +10,13 @@
     <Authors>Navigraph</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <RepositoryUrl>https://github.com/Navigraph/simlink-source-sdk</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="../../docs/readme-csharp.md" Pack="true" PackagePath="README.md" Visible="false" />
+    <None Include="../../assets/icon.png" Pack="true" PackagePath="icon.png" Visible="false" />
   </ItemGroup>
 
   <!-- `runtimes/<rid>/native/<library>` for each platform, from `cargo xtask package csharp-runtime`. -->
