@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*", "xtask"]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/Navigraph/simlink-source-sdk"
@@ -11,7 +11,7 @@ rust-version = "1.95"
 
 [workspace.dependencies]
 # Exact, since the macro generates code against this release of the SDK.
-simlink-source-sdk-macros = { path = "crates/simlink-source-sdk-macros", version = "=1.0.0" }
+simlink-source-sdk-macros = { path = "crates/simlink-source-sdk-macros", version = "=1.0.1" }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }

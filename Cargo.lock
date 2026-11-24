@@ -1221,7 +1221,7 @@ dependencies = [
 
 [[package]]
 name = "simlink-source-sdk"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "jsonschema",
  "log",
@@ -1237,7 +1237,7 @@ dependencies = [
 
 [[package]]
 name = "simlink-source-sdk-macros"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -1777,7 +1777,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "xtask"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "clap",

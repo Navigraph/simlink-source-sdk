@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1](https://github.com/Navigraph/simlink-source-sdk/compare/v1.0.0...v1.0.1) - 2026-11-24
+
+### 📄 Documentation
+
+- Clarified the installation steps and added separate READMEs for NuGet and crates.io.
+
 ## [1.0.0] - 2026-11-20
 
 Initial release.
